@@ -1,4 +1,5 @@
+^oceInspect\.csv$
 ^.DS_Store$
-^aqc\.Rproj$
+^oceInspect\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$

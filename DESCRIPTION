@@ -1,0 +1,16 @@
+Package: oceInspect
+Title: Inspect oce object
+Version: 0.1.0
+Authors@R:
+    person(given = "Dan",
+           family = "Kelley",
+           role = c("aut", "cre"),
+           email = "dan.kelley@dal.ca",
+           comment = c(ORCID = "https://orcid.org/0000-0001-7808-5911"))
+Description: Use the mouse to categorize points in a CTD-like object.
+Imports: argoFloats, oce (>= 1.4.0), shiny
+License: GPL (>= 3)
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1

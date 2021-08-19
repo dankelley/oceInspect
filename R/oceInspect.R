@@ -7,10 +7,7 @@ library(argoFloats)
 appName <- "oceInspect"
 appVersion <- "0.1"
 
-msg <- function(..., eos="\n")
-{
-    cat(file=stderr(), ..., eos)
-}
+debug <- FALSE
 
 pluralize <- function(n, name)
 {
@@ -29,7 +26,7 @@ keyPressHelp <- "Keystroke commands
 <li> u: undo last save</li>
 <li> s: show saved data</li>
 <li> w: write saved data to a csv file</li>
-<li> ?: display this message</li>
+<li> ?: display this window</li>
 </ul>"
 
 maybeNull <- function(x, default)
@@ -47,11 +44,6 @@ ui <- shiny::fluidPage(
     shiny::tags$script('$(document).on("keypress", function (e) { Shiny.onInputChange("keypress", e.which); Shiny.onInputChange("keypressTrigger", Math.random()); });'),
     style="text-indent:1em ; background:#e6f3ff ; .btn.disabled { background-color: red; }",
     shiny::fluidRow(
-        shiny::column(7,
-            shiny::uiOutput(outputId="UIinfo1")),
-        shiny::column(5,
-            shiny::uiOutput(outputId="UIinfo2"))),
-    shiny::fluidRow(
         shiny::column(3,
             shiny::selectInput("plotType", "Plot Type",
                 choices=c("Point"="p", "Line"="l", "Point+Line"="o"),
@@ -59,8 +51,17 @@ ui <- shiny::fluidPage(
         shiny::column(3,
             shiny::selectInput("plotChoice", "View",
                 choices=c("T-S"="TS", "density-spice"="densitySpice"),
-                selected="Temperature-Salinity"))
+                selected="Temperature-Salinity")),
+        shiny::column(2,
+            shiny::checkboxInput("showSaved", "Show Saved", FALSE)),
+        shiny::column(2,
+            shiny::checkboxInput("debug", "Debug", FALSE))
         ),
+    shiny::fluidRow(
+        shiny::column(7,
+            shiny::uiOutput(outputId="UIinfo1")),
+        shiny::column(5,
+            shiny::uiOutput(outputId="UIinfo2"))),
     shiny::fluidRow(
         shiny::plotOutput("plot",
             hover=shiny::hoverOpts("hover"),
@@ -70,10 +71,16 @@ ui <- shiny::fluidPage(
 server <- function(input, output, session)
 {
     data <- NULL
-    lastPoint <- list(filename=NULL, x=NULL, y=NULL, i=NULL, view=NULL)
-    allPoints <- list(filename=NULL, key=NULL, x=NULL, y=NULL, i=NULL, view=NULL)
+    lastPoint <- list(x=NULL, y=NULL, i=NULL, view=NULL, file=NULL)
+    allPoints <- list(key=NULL, x=NULL, y=NULL, i=NULL, view=NULL, file=NULL)
     state <- shiny::reactiveValues(
-        savedNumber=0)                 # making this reactive means info2 updates when points are saved
+        savedNumber=0,                 # making this reactive means info2 updates when points are saved
+        showSaved=FALSE)               # see "Options" UI element
+    msg <- function(..., eos="\n")
+    {
+        if (!is.null(input$debug) && input$debug)
+            cat(file=stderr(), ..., eos)
+    }
     tmp <- shiny::getShinyOption("data")
     if (!is.null(tmp)) {
         data <- tmp
@@ -99,20 +106,21 @@ server <- function(input, output, session)
         rval <- "Click in window to activate hover inspection"
         if (!is.null(input$hover$x)) {
             usr <- par("usr") # for scaling (to get closest data point)
+            pin <- par("pin")
             if (input$plotChoice == "TS") {
                 X <- data[["SA"]]
                 Y <- data[["CT"]]
                 p <- data[["pressure"]]
-                dX <- (input$hover$x - X) / (usr[2]-usr[1])
-                dY <- (input$hover$y - Y) / (usr[4]-usr[3])
+                dX <- pin[1] * (input$hover$x - X) / (usr[2] - usr[1])
+                dY <- pin[2] * (input$hover$y - Y) / (usr[4] - usr[3])
                 d <- dX^2 + dY^2
                 i <- which.min(d)
             } else if (input$plotChoice == "densitySpice") {
                 X <- data[["spice"]]
                 Y <- data[["sigma0"]]
                 p <- data[["pressure"]]
-                dX <- (input$hover$x - X) / (usr[2]-usr[1])
-                dY <- (input$hover$y - Y) / (usr[4]-usr[3])
+                dX <- pin[1] * (input$hover$x - X) / (usr[2] - usr[1])
+                dY <- pin[2] * (input$hover$y - Y) / (usr[4] - usr[3])
                 d <- dX^2 + dY^2
                 i <- which.min(d)
             }
@@ -134,13 +142,23 @@ server <- function(input, output, session)
     output$plot <- shiny::renderPlot({
         if (!is.null(data)) {
             par(mgp=mgp)
+            highlight <- rep(FALSE, length(data[["pressure"]]))
+            msg("about to plot (state$showSaved=", state$showSaved, ")")
+            # Since state$savedNumber is altered by adding/removing points,
+            # the plot will be kept up-to-date.
+            if (state$showSaved && state$savedNumber > 0L) {
+                msg("should show saved now; i=", paste(allPoints$i, collapse=" "))
+                highlight[allPoints$i] <- TRUE
+                msg(paste("indices: ", paste(which(highlight), collapse=" ")))
+            }
             if (input$plotChoice == "TS") {
                 par(mar=c(3.5,3.5,1.5,1.5))
                 oce::plotTS(data,#oce::as.ctd(S, T, p),
                     eos="gsw",
                     type=maybeNull(input$plotType, "o"),
                     pch=pch,
-                    cex=cex)
+                    cex=ifelse(highlight, 1.4*cex, cex),
+                    col=ifelse(highlight, 2, 1))
                 grid()
             } else if (input$plotChoice == "densitySpice") {
                 spice <- data[["spice"]]
@@ -151,9 +169,11 @@ server <- function(input, output, session)
                     ylab=oce::resizableLabel("sigma0"),
                     type=maybeNull(input$plotType, "o"),
                     pch=pch,
-                    cex=cex)
+                    cex=ifelse(highlight, 1.4*cex, cex),
+                    col=ifelse(highlight, 2, 1))
                 grid()
             }
+            #mtext(sprintf("%d points saved", state$savedNumber))
         }
     }, height=plotHeight, pointsize=16)
 
@@ -208,13 +228,16 @@ server <- function(input, output, session)
         }
     }, height=plotHeight, pointsize=pointsize)
 
+    shiny::observeEvent(input$showSaved, {
+        state$showSaved <<- input$showSaved
+        msg(paste0("observeEvent(plotOptions) set state$showSaved=", state$showSaved))
+    })
+
     shiny::observeEvent(input$keypressTrigger, {
         key <- intToUtf8(input$keypress)
-        #message(input$keypress)
-        #message(key)
+        msg(paste0("key=", key))
         if (key %in% as.character(0:9) && !is.null(lastPoint$x)) {
-            #message("flagging number: ", key, "...")
-            message(sprintf("%d %f %f %d", as.integer(key), lastPoint$x, lastPoint$y, lastPoint$i))
+            msg(sprintf("%d %f %f %d", as.integer(key), lastPoint$x, lastPoint$y, lastPoint$i))
             n <- length(allPoints$key)
             allPoints$key[n+1] <<- as.integer(key)
             allPoints$filename[n+1] <<- data[["filename"]]
@@ -259,14 +282,26 @@ server <- function(input, output, session)
 
 #' Inspect an oce CTD-like object
 #'
+#' This is an R shiny app that displays the contents of either an argo-class or ctd-class object.
+#' GUI and keystroke actions permit flagging data points of interest, and the app can save
+#' a list of such points, for separate processing.  Although simple, this scheme can be useful
+#' in tasks such as identifying points of interest (e.g. mixed layers, intrusions, erroneous
+#' data) as part of quality-control processing or scientific analyses.
 #'
-#' @param data an oce object (optional). If provided, then `ID`, `cycle`, `age`,
-#' `server` and `destdir` are all ignored.
+#' GUI controls are provided for selecting the plotted field, and the app also responds to keystrokes.
+#' A text box shows the current location of the mouse pointer in the (x,y) coordinates of the
+#' graph, as well as the data point that is nearest.  Pressing the '0' key (or any other numeric
+#' key, up to '9') saves this information into a buffer along with the name of the input data
+#' and the present plot view.  Pressing the 'u' key performs an undo operation by removing the
+#' item that was most recently added to the buffer.  Pressing the 's' key shows the contents
+#' of this buffer, and pressing 'w' writes those contents to a comma-separated-value file whose
+#' name, patterned on the name of the input data file, is indicated in a text box above the plot.
 #'
-#' @param debug integer value that controls how much information this app prints
-#' to the console as it works.  The default value of 0 leads to a fairly limited
-#' amount of printing, while higher values lead to more information. This information
-#' can be helpful in diagnosing problems or bottlenecks.
+#' @param data an oce object (optional). If provided, then `ID`, `cycle`, `age`, `server` and `destdir` are all ignored.
+#'
+#' @param debug integer value that controls how much information this app prints to the console as it works.
+#' The default value of 0 leads to a fairly limited amount of printing, while higher values lead to
+#' more information. This information can be helpful in diagnosing problems or bottlenecks.
 #'
 #' @examples
 #' library(oceInspect)
@@ -285,9 +320,7 @@ server <- function(input, output, session)
 #' @export
 #'
 #' @author Dan Kelley
-oceInspectApp <- function(
-    data=NULL,
-    debug=0)
+oceInspectApp <- function( data=NULL, debug=0)
 {
     if (!requireNamespace("shiny", quietly=TRUE))
         stop("must install.packages(\"shiny\") for this to work")
@@ -298,9 +331,7 @@ oceInspectApp <- function(
         dataName <- data
         data <- oce::read.oce(dataName)
     }
-    shiny::shinyOptions(
-        data=data,
-        debug=debug)
+    shiny::shinyOptions(data=data, debug=debug)
     print(shiny::shinyApp(ui=ui, server=server))
 }
 

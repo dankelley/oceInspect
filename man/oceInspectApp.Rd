@@ -7,16 +7,28 @@
 oceInspectApp(data = NULL, debug = 0)
 }
 \arguments{
-\item{data}{an oce object (optional). If provided, then \code{ID}, \code{cycle}, \code{age},
-\code{server} and \code{destdir} are all ignored.}
+\item{data}{an oce object (optional). If provided, then \code{ID}, \code{cycle}, \code{age}, \code{server} and \code{destdir} are all ignored.}
 
-\item{debug}{integer value that controls how much information this app prints
-to the console as it works.  The default value of 0 leads to a fairly limited
-amount of printing, while higher values lead to more information. This information
-can be helpful in diagnosing problems or bottlenecks.}
+\item{debug}{integer value that controls how much information this app prints to the console as it works.
+The default value of 0 leads to a fairly limited amount of printing, while higher values lead to
+more information. This information can be helpful in diagnosing problems or bottlenecks.}
 }
 \description{
-Inspect an oce CTD-like object
+This is an R shiny app that displays the contents of either an argo-class or ctd-class object.
+GUI and keystroke actions permit flagging data points of interest, and the app can save
+a list of such points, for separate processing.  Although simple, this scheme can be useful
+in tasks such as identifying points of interest (e.g. mixed layers, intrusions, erroneous
+data) as part of quality-control processing or scientific analyses.
+}
+\details{
+GUI controls are provided for selecting the plotted field, and the app also responds to keystrokes.
+A text box shows the current location of the mouse pointer in the (x,y) coordinates of the
+graph, as well as the data point that is nearest.  Pressing the '0' key (or any other numeric
+key, up to '9') saves this information into a buffer along with the name of the input data
+and the present plot view.  Pressing the 'u' key performs an undo operation by removing the
+item that was most recently added to the buffer.  Pressing the 's' key shows the contents
+of this buffer, and pressing 'w' writes those contents to a comma-separated-value file whose
+name, patterned on the name of the input data file, is indicated in a text box above the plot.
 }
 \examples{
 library(oceInspect)

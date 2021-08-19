@@ -20,17 +20,16 @@ Inspect an oce CTD-like object
 }
 \examples{
 library(oceInspect)
-# Example 1: argo file
+# Example 1: argo file (specified as an oce object)
 if (interactive()) {
     f <- system.file("extdata/R6903548_029.nc", package="oceInspect")
     d <- oce::read.oce(f)
     oceInspectApp(d)
 }
-# Example 2: ctd file
+# Example 2: ctd file (specified by name)
 if (interactive()) {
     f <- system.file("extdata/ctd.cnv", package="oceInspect")
-    d <- oce::read.oce(f)
-    oceInspectApp(d)
+    oceInspectApp(f)
 }
 
 }

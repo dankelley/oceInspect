@@ -1,4 +1,4 @@
-^oceInspect\.csv$
+^.*\.csv$
 ^.DS_Store$
 ^oceInspect\.Rproj$
 ^\.Rproj\.user$

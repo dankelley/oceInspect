@@ -12,6 +12,11 @@ msg <- function(..., eos="\n")
     cat(file=stderr(), ..., eos)
 }
 
+pluralize <- function(n, name)
+{
+    if (n == 1L) paste0(n, " ", name) else paste0(n, " ", name, "s")
+}
+
 plotHeight <- 500
 pointsize <- 12
 col <- 1
@@ -111,7 +116,7 @@ server <- function(input, output, session)
                 d <- dX^2 + dY^2
                 i <- which.min(d)
             }
-            rval <- sprintf("x=%.4g y=%.4g near %d-th point at %.1f dbar",
+            rval <- sprintf("x=%.4g y=%.4g near %d-th data point at %.1f dbar",
                 input$hover$x, input$hover$y, i, p[i])
             lastPoint$view <<- input$plotChoice
             lastPoint$x <<- input$hover$x
@@ -123,7 +128,7 @@ server <- function(input, output, session)
 
     output$info2 <- shiny::renderText({
         csv <- paste0(gsub("\\..*$", "", gsub(".*/","", data[["filename"]])), ".csv")
-        sprintf("%d points in %s ", state$savedNumber, csv)
+        sprintf("%s in %s ", pluralize(state$savedNumber, "point"), csv)
     })
 
     output$plot <- shiny::renderPlot({
@@ -265,17 +270,16 @@ server <- function(input, output, session)
 #'
 #' @examples
 #' library(oceInspect)
-#' # Example 1: argo file
+#' # Example 1: argo file (specified as an oce object)
 #' if (interactive()) {
 #'     f <- system.file("extdata/R6903548_029.nc", package="oceInspect")
 #'     d <- oce::read.oce(f)
 #'     oceInspectApp(d)
 #' }
-#' # Example 2: ctd file
+#' # Example 2: ctd file (specified by name)
 #' if (interactive()) {
 #'     f <- system.file("extdata/ctd.cnv", package="oceInspect")
-#'     d <- oce::read.oce(f)
-#'     oceInspectApp(d)
+#'     oceInspectApp(f)
 #' }
 #'
 #' @export
@@ -288,6 +292,12 @@ oceInspectApp <- function(
     if (!requireNamespace("shiny", quietly=TRUE))
         stop("must install.packages(\"shiny\") for this to work")
     debug <- as.integer(max(0, min(debug, 3))) # put in range from 0 to 3
+    if (length(data) != 1L)
+        stop("for now, 'data' must be of length 1")
+    if (is.character(data)) {
+        dataName <- data
+        data <- oce::read.oce(dataName)
+    }
     shiny::shinyOptions(
         data=data,
         debug=debug)

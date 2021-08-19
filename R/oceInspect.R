@@ -53,7 +53,7 @@ ui <- shiny::fluidPage(
                 choices=c("T-S"="TS", "density-spice"="densitySpice"),
                 selected="Temperature-Salinity")),
         shiny::column(2,
-            shiny::checkboxInput("showSaved", "Show Saved", FALSE)),
+            shiny::checkboxInput("showSaved", "Show Saved", TRUE)),
         shiny::column(2,
             shiny::checkboxInput("debug", "Debug", FALSE))
         ),
@@ -140,6 +140,8 @@ server <- function(input, output, session)
     })
 
     output$plot <- shiny::renderPlot({
+        colNormal <- gray(0.75, alpha=0.9)
+        colHighlight <- 2
         if (!is.null(data)) {
             par(mgp=mgp)
             highlight <- rep(FALSE, length(data[["pressure"]]))
@@ -157,9 +159,12 @@ server <- function(input, output, session)
                     eos="gsw",
                     type=maybeNull(input$plotType, "o"),
                     pch=pch,
-                    cex=ifelse(highlight, 1.4*cex, cex),
-                    col=ifelse(highlight, 2, 1))
+                    cex=ifelse(highlight, 2*cex, cex),
+                    col=colNormal)
                 grid()
+                if (length(allPoints$i))
+                    points(data[["SA"]][allPoints$i], data[["CT"]][allPoints$i],
+                        pch=pch, cex=2*cex, col=colHighlight)
             } else if (input$plotChoice == "densitySpice") {
                 spice <- data[["spice"]]
                 sigma0 <- data[["sigma0"]]
@@ -169,9 +174,12 @@ server <- function(input, output, session)
                     ylab=oce::resizableLabel("sigma0"),
                     type=maybeNull(input$plotType, "o"),
                     pch=pch,
-                    cex=ifelse(highlight, 1.4*cex, cex),
-                    col=ifelse(highlight, 2, 1))
+                    cex=ifelse(highlight, 2*cex, cex),
+                    col=colNormal)
                 grid()
+                if (length(allPoints$i))
+                    points(data[["spice0"]][allPoints$i], data[["sigma0"]][allPoints$i],
+                        pch=pch, cex=2*cex, col=colHighlight)
             }
             #mtext(sprintf("%d points saved", state$savedNumber))
         }

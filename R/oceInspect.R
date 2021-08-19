@@ -72,7 +72,7 @@ server <- function(input, output, session)
 {
     data <- NULL
     lastPoint <- list(x=NULL, y=NULL, i=NULL, view=NULL, file=NULL)
-    allPoints <- list(key=NULL, x=NULL, y=NULL, i=NULL, view=NULL, file=NULL)
+    allPoints <- list(key=NULL, x=NULL, y=NULL, i=NULL, view=NULL, filename=NULL)
     state <- shiny::reactiveValues(
         savedNumber=0,                 # making this reactive means info2 updates when points are saved
         showSaved=FALSE)               # see "Options" UI element

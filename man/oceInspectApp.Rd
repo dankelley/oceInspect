@@ -4,14 +4,12 @@
 \alias{oceInspectApp}
 \title{Inspect an oce CTD-like object}
 \usage{
-oceInspectApp(data = NULL, debug = 0)
+oceInspectApp(data = NULL)
 }
 \arguments{
-\item{data}{an oce object (optional). If provided, then \code{ID}, \code{cycle}, \code{age}, \code{server} and \code{destdir} are all ignored.}
-
-\item{debug}{integer value that controls how much information this app prints to the console as it works.
-The default value of 0 leads to a fairly limited amount of printing, while higher values lead to
-more information. This information can be helpful in diagnosing problems or bottlenecks.}
+\item{data}{either an oce object containing salinity, temperature, pressure,
+longitude and latitude, or the name of an object, in which case it is
+read with \code{\link[=read.oce]{read.oce()}}. These two cases are illustrated in Examples 1 and 2.}
 }
 \description{
 This is an R shiny app that displays the contents of either an argo-class or ctd-class object.

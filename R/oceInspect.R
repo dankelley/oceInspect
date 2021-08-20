@@ -1,18 +1,17 @@
 ## vim:textwidth=128:expandtab:shiftwidth=4:softtabstop=4
 library(argoFloats)
 
-#' @importFrom graphics grid mtext par
+#' @importFrom graphics grid lines mtext par points
+#' @importFrom grDevices gray
+#' @importFrom oce as.ctd read.oce
+#' @importFrom stats predict smooth.spline
 #' @importFrom utils head write.csv
 
 appName <- "oceInspect"
-appVersion <- "0.1"
+appVersion <- "0.2"
 
 debug <- FALSE
 
-pluralize <- function(n, name)
-{
-    if (n == 1L) paste0(n, " ", name) else paste0(n, " ", name, "s")
-}
 
 plotHeight <- 500
 pointsize <- 12
@@ -32,28 +31,39 @@ keyPressHelp <- "Keystroke commands
 maybeNull <- function(x, default)
     if (is.null(x)) default else x
 
+pluralize <- function(n, name)
+    if (n == 1L) paste0(n, " ", name) else paste0(n, " ", name, "s")
+
+#. pointInBrush <- function(x, y, brush)
+#.     brush$xmin <= x & x <= brush$xmax & brush$ymin <= y & y <= brush$ymax
+
 cacheEnv <- new.env(parent=emptyenv())
 
-overallHelp <- "FIXME: write something useful here.  The best plan is to wait until the UI is stable."
-
-pointInBrush <- function(x, y, brush)
-    brush$xmin <= x & x <= brush$xmax & brush$ymin <= y & y <= brush$ymax
+#. overallHelp <- "FIXME: write something useful here.  The best plan is to wait until the UI is stable."
 
 ui <- shiny::fluidPage(
     shiny::headerPanel(title="", windowTitle="oceInspect"),
     shiny::tags$script('$(document).on("keypress", function (e) { Shiny.onInputChange("keypress", e.which); Shiny.onInputChange("keypressTrigger", Math.random()); });'),
     style="text-indent:1em ; background:#e6f3ff ; .btn.disabled { background-color: red; }",
     shiny::fluidRow(
-        shiny::column(3,
-            shiny::selectInput("plotType", "Plot Type",
-                choices=c("Point"="p", "Line"="l", "Point+Line"="o"),
+        shiny::column(2,
+            shiny::selectInput("plotType", "Type",
+                choices=c("Point"="p", "Line"="l", "Both"="o"),
                 selected="o")),
-        shiny::column(3,
+        shiny::column(2,
             shiny::selectInput("plotChoice", "View",
-                choices=c("T-S"="TS", "density-spice"="densitySpice"),
+                choices=c("T-S"="TS", "\u03C3-\u03C0"="densitySpice"),
                 selected="Temperature-Salinity")),
         shiny::column(2,
-            shiny::checkboxInput("showSaved", "Show Saved", TRUE)),
+            shiny::selectInput("data", "Data",
+                choices=c("Raw"="raw", "Spline"="spline"),
+                selected="Raw")),
+        shiny::conditionalPanel("input.data == 'spline'",
+            shiny::column(2,
+                shiny::numericInput("Ndf", "N/df",
+                    5, 1, 10, step=1))),
+         shiny::column(2,
+            shiny::checkboxInput("showSaved", "Highlight", TRUE)),
         shiny::column(2,
             shiny::checkboxInput("debug", "Debug", FALSE))
         ),
@@ -61,7 +71,8 @@ ui <- shiny::fluidPage(
         shiny::column(7,
             shiny::uiOutput(outputId="UIinfo1")),
         shiny::column(5,
-            shiny::uiOutput(outputId="UIinfo2"))),
+            shiny::uiOutput(outputId="UIinfo2"))
+        ),
     shiny::fluidRow(
         shiny::plotOutput("plot",
             hover=shiny::hoverOpts("hover"),
@@ -140,7 +151,7 @@ server <- function(input, output, session)
     })
 
     output$plot <- shiny::renderPlot({
-        colNormal <- gray(0.75, alpha=0.9)
+        colNormal <- gray(0.66, alpha=0.9)
         colHighlight <- 2
         if (!is.null(data)) {
             par(mgp=mgp)
@@ -153,35 +164,63 @@ server <- function(input, output, session)
                 highlight[allPoints$i] <- TRUE
                 msg(paste("indices: ", paste(which(highlight), collapse=" ")))
             }
+            # Define X and Y for the line, depending on whether it shows data or spline.
+            if (input$data == "spline") {
+                pressure <- data[["pressure"]]
+                df <- length(pressure) / max(1L, as.integer(input$Ndf))
+                P <- seq(min(pressure), max(pressure), 1)
+                S <- predict(smooth.spline(pressure, data[["salinity"]], df=df), P)$y
+                T <- predict(smooth.spline(pressure, data[["temperature"]], df=df), P)$y
+                CTD <- as.ctd(S, T, P, longitude=data[["longitude"]], latitude=data[["latitude"]])
+            }
             if (input$plotChoice == "TS") {
                 par(mar=c(3.5,3.5,1.5,1.5))
-                oce::plotTS(data,#oce::as.ctd(S, T, p),
+                oce::plotTS(data,
                     eos="gsw",
-                    type=maybeNull(input$plotType, "o"),
+                    type="n",
                     pch=pch,
                     cex=ifelse(highlight, 2*cex, cex),
                     col=colNormal)
                 grid()
+                type <- maybeNull(input$plotType, "o")
+                if (type %in% c("p", "o"))
+                    points(data[["SA"]], data[["CT"]], pch=pch, col=colNormal, cex=cex)
+                # Lines are black for data, blue for spline
+                if (type %in% c("l", "o")) {
+                    if (input$data == "raw") {
+                        lines(data[["SA"]], data[["CT"]], lwd=2, col=colNormal)
+                    } else {
+                        lines(CTD[["SA"]], CTD[["CT"]], lwd=2, col=4)
+                    }
+                }
                 if (length(allPoints$i))
                     points(data[["SA"]][allPoints$i], data[["CT"]][allPoints$i],
                         pch=pch, cex=2*cex, col=colHighlight)
             } else if (input$plotChoice == "densitySpice") {
-                spice <- data[["spice"]]
-                sigma0 <- data[["sigma0"]]
                 par(mar=c(3.5,3.5,1.5,1.5))
-                plot(spice, sigma0, ylim=rev(range(sigma0, na.rm=TRUE)),
+                plot(data[["spice"]], data[["sigma0"]], ylim=rev(range(data[["sigma0"]], na.rm=TRUE)),
                     xlab=oce::resizableLabel("spice"),
                     ylab=oce::resizableLabel("sigma0"),
-                    type=maybeNull(input$plotType, "o"),
+                    type="n",
                     pch=pch,
                     cex=ifelse(highlight, 2*cex, cex),
                     col=colNormal)
                 grid()
+                type <- maybeNull(input$plotType, "o")
+                if (type %in% c("p", "o"))
+                    points(data[["spice"]], data[["sigma0"]], pch=pch, col=colNormal, cex=cex)
+                # Lines are black for data, blue for spline
+                if (type %in% c("l", "o")) {
+                    if (input$data == "raw") {
+                        lines(data[["spice"]], data[["sigma0"]], lwd=2, col=colNormal)
+                    } else {
+                        lines(CTD[["spice"]], CTD[["sigma0"]], lwd=2, col=4)
+                    }
+                }
                 if (length(allPoints$i))
-                    points(data[["spice0"]][allPoints$i], data[["sigma0"]][allPoints$i],
+                    points(data[["spice"]][allPoints$i], data[["sigma0"]][allPoints$i],
                         pch=pch, cex=2*cex, col=colHighlight)
             }
-            #mtext(sprintf("%d points saved", state$savedNumber))
         }
     }, height=plotHeight, pointsize=16)
 
@@ -305,11 +344,9 @@ server <- function(input, output, session)
 #' of this buffer, and pressing 'w' writes those contents to a comma-separated-value file whose
 #' name, patterned on the name of the input data file, is indicated in a text box above the plot.
 #'
-#' @param data an oce object (optional). If provided, then `ID`, `cycle`, `age`, `server` and `destdir` are all ignored.
-#'
-#' @param debug integer value that controls how much information this app prints to the console as it works.
-#' The default value of 0 leads to a fairly limited amount of printing, while higher values lead to
-#' more information. This information can be helpful in diagnosing problems or bottlenecks.
+#' @param data either an oce object containing salinity, temperature, pressure,
+#' longitude and latitude, or the name of an object, in which case it is
+#' read with [read.oce()]. These two cases are illustrated in Examples 1 and 2.
 #'
 #' @examples
 #' library(oceInspect)
@@ -328,18 +365,16 @@ server <- function(input, output, session)
 #' @export
 #'
 #' @author Dan Kelley
-oceInspectApp <- function( data=NULL, debug=0)
+oceInspectApp <- function( data=NULL)
 {
     if (!requireNamespace("shiny", quietly=TRUE))
         stop("must install.packages(\"shiny\") for this to work")
     debug <- as.integer(max(0, min(debug, 3))) # put in range from 0 to 3
-    if (length(data) != 1L)
-        stop("for now, 'data' must be of length 1")
     if (is.character(data)) {
         dataName <- data
-        data <- oce::read.oce(dataName)
+        data <- lapply(dataName, read.oce)
     }
-    shiny::shinyOptions(data=data, debug=debug)
+    shiny::shinyOptions(data=data)
     print(shiny::shinyApp(ui=ui, server=server))
 }
 

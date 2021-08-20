@@ -1,6 +1,6 @@
 Package: oceInspect
 Title: Inspect oce object
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person(given = "Dan",
            family = "Kelley",

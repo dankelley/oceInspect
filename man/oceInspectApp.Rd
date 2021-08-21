@@ -4,12 +4,13 @@
 \alias{oceInspectApp}
 \title{Inspect an oce CTD-like object}
 \usage{
-oceInspectApp(data = NULL)
+oceInspectApp(objects = NULL)
 }
 \arguments{
-\item{data}{either an oce object containing salinity, temperature, pressure,
-longitude and latitude, or the name of an object, in which case it is
-read with \code{\link[=read.oce]{read.oce()}}. These two cases are illustrated in Examples 1 and 2.}
+\item{objects}{either a list containing either CTD-like oce objects or a names of
+files containing such objects.  For the file-name case, the data are read with
+\code{\link[oce:read.oce]{oce::read.oce()}}.  A CTD-like object is one that holds salinity, temperature, pressure,
+longitude and latitude.}
 }
 \description{
 This is an R shiny app that displays the contents of either an argo-class or ctd-class object.
@@ -32,14 +33,14 @@ name, patterned on the name of the input data file, is indicated in a text box a
 library(oceInspect)
 # Example 1: argo file (specified as an oce object)
 if (interactive()) {
-    f <- system.file("extdata/R6903548_029.nc", package="oceInspect")
-    d <- oce::read.oce(f)
-    oceInspectApp(d)
+    f1 <- system.file("extdata/R6903548_029.nc", package="oceInspect")
+    d1 <- oce::read.oce(f1)
+    oceInspectApp(d1)
 }
 # Example 2: ctd file (specified by name)
 if (interactive()) {
-    f <- system.file("extdata/ctd.cnv", package="oceInspect")
-    oceInspectApp(f)
+    f2 <- system.file("extdata/ctd.cnv", package="oceInspect")
+    oceInspectApp(f2)
 }
 
 }

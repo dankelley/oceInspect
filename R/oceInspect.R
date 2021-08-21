@@ -1,4 +1,4 @@
-## vim:textwidth=128:expandtab:shiftwidth=4:softtabstop=4
+## vim:textwidth=100:expandtab:shiftwidth=4:softtabstop=4
 library(argoFloats)
 
 #' @importFrom graphics grid lines mtext par points
@@ -46,14 +46,17 @@ ui <- shiny::fluidPage(
     shiny::tags$script('$(document).on("keypress", function (e) { Shiny.onInputChange("keypress", e.which); Shiny.onInputChange("keypressTrigger", Math.random()); });'),
     style="text-indent:1em ; background:#e6f3ff ; .btn.disabled { background-color: red; }",
     shiny::fluidRow(
-        shiny::column(2,
-            shiny::selectInput("plotType", "Type",
-                choices=c("Point"="p", "Line"="l", "Both"="o"),
-                selected="o")),
+        shiny::column(3, shiny::uiOutput(outputId="nameUI")),
+        #?shiny::column(1,
+        #?    shiny::numericInput("index", "Index", 1L, min=1L, max=shiny::getShinyOption("ndata"), step=1L)),
         shiny::column(2,
             shiny::selectInput("plotChoice", "View",
                 choices=c("T-S"="TS", "\u03C3-\u03C0"="densitySpice"),
                 selected="Temperature-Salinity")),
+        shiny::column(2,
+            shiny::selectInput("plotType", "Type",
+                choices=c("Point"="p", "Line"="l", "Both"="o"),
+                selected="o")),
         shiny::column(2,
             shiny::selectInput("data", "Data",
                 choices=c("Raw"="raw", "Spline"="spline"),
@@ -62,9 +65,9 @@ ui <- shiny::fluidPage(
             shiny::column(2,
                 shiny::numericInput("Ndf", "N/df",
                     5, 1, 10, step=1))),
-         shiny::column(2,
-            shiny::checkboxInput("showSaved", "Highlight", TRUE)),
-        shiny::column(2,
+         shiny::column(1,
+            shiny::checkboxInput("showSaved", "Hilite", TRUE)),
+        shiny::column(1,
             shiny::checkboxInput("debug", "Debug", FALSE))
         ),
     shiny::fluidRow(
@@ -81,10 +84,10 @@ ui <- shiny::fluidPage(
 
 server <- function(input, output, session)
 {
-    data <- NULL
-    lastPoint <- list(x=NULL, y=NULL, i=NULL, view=NULL, file=NULL)
-    allPoints <- list(key=NULL, x=NULL, y=NULL, i=NULL, view=NULL, filename=NULL)
+    lastPoint <- list(view=NULL, x=NULL, y=NULL, i=NULL)
+    allPoints <- list(key=NULL, filename=NULL, view=NULL, x=NULL, y=NULL, i=NULL)
     state <- shiny::reactiveValues(
+        i=0,
         savedNumber=0,                 # making this reactive means info2 updates when points are saved
         showSaved=FALSE)               # see "Options" UI element
     msg <- function(..., eos="\n")
@@ -92,18 +95,42 @@ server <- function(input, output, session)
         if (!is.null(input$debug) && input$debug)
             cat(file=stderr(), ..., eos)
     }
-    tmp <- shiny::getShinyOption("data")
-    if (!is.null(tmp)) {
-        data <- tmp
-        for (n in names(data@data)) {
-            if (is.matrix(data@data[[n]]))
-                data@data[[n]] <- data@data[[n]][,1]
-            else if (n %in% c("longitude", "latitude", "time"))
-                data@data[[n]] <- data@data[[n]][1]
-        }
-    } else {
+    dataAll <- shiny::getShinyOption("data")
+    names <- shiny::getShinyOption("names")
+    message("names: ", paste(names, collapse=" "))
+    if (is.null(dataAll))
         stop("must supply a value for the 'data' parameter")
-    }
+    #? data <- dataAll[[state$index]]
+    #? message("index=", index)
+    #?data <- dataAll[[index]] # FIXME: does this work?
+    #?DAN3<<-data
+
+    output$nameUI <- shiny::renderUI({
+        #shiny::numericInput("index", "Index", value=1L, min=1L, max=shiny::getShinyOption("ndata"), step=1L)
+        names <- shiny::getShinyOption("names")
+        shiny::selectInput("name", "Name", choices=names, selected=names[1])
+    })
+
+    shiny::observeEvent(input$name, {
+        names <- shiny::getShinyOption("names")
+        message(paste0("observeEvent(index); new name (input$name)=", input$name, "; old name ", names[state$i]))
+        if (length(allPoints$x) > 0L) {
+            csv <- paste0(names[state$i], ".csv")
+            message("csv='", csv, "'")
+            write.csv(as.data.frame(allPoints), csv, row.names=FALSE)
+            shiny::showNotification(paste0("Wrote data to '", csv, "'", type="message"))
+            allPoints$key <<- NULL
+            allPoints$filename <<- NULL
+            allPoints$view <<- NULL
+            allPoints$x <<- NULL
+            allPoints$y <<- NULL
+            allPoints$i <<- NULL
+            state$savedNumber <- 0L
+        }
+        w <- which(input$name == names)
+        if (length(w))
+            state$i <<- w[1]
+    })
 
     output$UIinfo1 <- shiny::renderUI({
         shiny::verbatimTextOutput("info1")
@@ -114,7 +141,9 @@ server <- function(input, output, session)
     })
 
     output$info1 <- shiny::renderText({
+        #. message("output$info1 with state$i=", state$i)
         rval <- "Click in window to activate hover inspection"
+        data <- dataAll[[state$i]]
         if (!is.null(input$hover$x)) {
             usr <- par("usr") # for scaling (to get closest data point)
             pin <- par("pin")
@@ -146,23 +175,23 @@ server <- function(input, output, session)
     })
 
     output$info2 <- shiny::renderText({
-        csv <- paste0(gsub("\\..*$", "", gsub(".*/","", data[["filename"]])), ".csv")
-        sprintf("%s in %s ", pluralize(state$savedNumber, "point"), csv)
+        #. message("output$info1 with state$i=", state$i)
+        sprintf("%s in buffer ", pluralize(state$savedNumber, "point"))
     })
 
     output$plot <- shiny::renderPlot({
+        message("output$plot with state$i=", state$i, " (length(dataAll)=", length(dataAll), ")")
         colNormal <- gray(0.66, alpha=0.9)
         colHighlight <- 2
+        data <- dataAll[[state$i]]
         if (!is.null(data)) {
             par(mgp=mgp)
             highlight <- rep(FALSE, length(data[["pressure"]]))
-            msg("about to plot (state$showSaved=", state$showSaved, ")")
             # Since state$savedNumber is altered by adding/removing points,
             # the plot will be kept up-to-date.
             if (state$showSaved && state$savedNumber > 0L) {
-                msg("should show saved now; i=", paste(allPoints$i, collapse=" "))
+                msg("will overplot with i=", paste(allPoints$i, collapse=" "))
                 highlight[allPoints$i] <- TRUE
-                msg(paste("indices: ", paste(which(highlight), collapse=" ")))
             }
             # Define X and Y for the line, depending on whether it shows data or spline.
             if (input$data == "spline") {
@@ -225,6 +254,7 @@ server <- function(input, output, session)
     }, height=plotHeight, pointsize=16)
 
     output$plotProfileRho <- shiny::renderPlot({
+        data <- dataAll[[state$i]]
         if (!is.null(data)) {
             par(mar=c(1,3,3,1))
             S <- data[["salinity"]]
@@ -242,6 +272,7 @@ server <- function(input, output, session)
     }, height=plotHeight, pointsize=pointsize)
 
     output$plotProfileT <- shiny::renderPlot({
+        data <- dataAll[[state$i]]
         if (!is.null(data)) {
             par(mar=c(1,3,3,1))
             S <- data[["salinity"]]
@@ -259,6 +290,7 @@ server <- function(input, output, session)
     }, height=plotHeight, pointsize=pointsize)
 
     output$plotProfileS <- shiny::renderPlot({
+        data <- dataAll[[state$i]]
         if (!is.null(data)) {
             par(mar=c(1,3,3,1))
             S <- data[["salinity"]]
@@ -281,8 +313,10 @@ server <- function(input, output, session)
     })
 
     shiny::observeEvent(input$keypressTrigger, {
+        message("observing input$keypressTrigger with state$i=", state$i, " (length(dataAll)=", length(dataAll))
         key <- intToUtf8(input$keypress)
         msg(paste0("key=", key))
+        data <- dataAll[[state$i]]
         if (key %in% as.character(0:9) && !is.null(lastPoint$x)) {
             msg(sprintf("%d %f %f %d", as.integer(key), lastPoint$x, lastPoint$y, lastPoint$i))
             n <- length(allPoints$key)
@@ -313,12 +347,13 @@ server <- function(input, output, session)
                 print(file=stderr(), as.data.frame(allPoints))
             }
         } else if (key == "w") {
-            csv <- paste0(gsub("\\..*$", "", gsub(".*/","", data[["filename"]])), ".csv")
+            csv <- paste0(names[state$i], ".csv")
             if (length(allPoints$x) < 1L) {
                 shiny::showNotification(paste0("No data to write to ", csv, "; Press '?' to learn how to save data"),
                     type="error")
             } else {
                 write.csv(as.data.frame(allPoints), csv, row.names=FALSE)
+                shiny::showNotification(paste0("Wrote data to '", csv, "'"), type="message")
             }
         } else if (key == "?") {
             shiny::showModal(shiny::modalDialog(title="Key-stroke commands",
@@ -344,37 +379,58 @@ server <- function(input, output, session)
 #' of this buffer, and pressing 'w' writes those contents to a comma-separated-value file whose
 #' name, patterned on the name of the input data file, is indicated in a text box above the plot.
 #'
-#' @param data either an oce object containing salinity, temperature, pressure,
-#' longitude and latitude, or the name of an object, in which case it is
-#' read with [read.oce()]. These two cases are illustrated in Examples 1 and 2.
+#' @param objects either a list containing either CTD-like oce objects or a names of
+#' files containing such objects.  For the file-name case, the data are read with
+#' [oce::read.oce()].  A CTD-like object is one that holds salinity, temperature, pressure,
+#' longitude and latitude.
 #'
 #' @examples
 #' library(oceInspect)
 #' # Example 1: argo file (specified as an oce object)
 #' if (interactive()) {
-#'     f <- system.file("extdata/R6903548_029.nc", package="oceInspect")
-#'     d <- oce::read.oce(f)
-#'     oceInspectApp(d)
+#'     f1 <- system.file("extdata/R6903548_029.nc", package="oceInspect")
+#'     d1 <- oce::read.oce(f1)
+#'     oceInspectApp(d1)
 #' }
 #' # Example 2: ctd file (specified by name)
 #' if (interactive()) {
-#'     f <- system.file("extdata/ctd.cnv", package="oceInspect")
-#'     oceInspectApp(f)
+#'     f2 <- system.file("extdata/ctd.cnv", package="oceInspect")
+#'     oceInspectApp(f2)
 #' }
 #'
 #' @export
 #'
 #' @author Dan Kelley
-oceInspectApp <- function( data=NULL)
+oceInspectApp <- function(objects=NULL)
 {
     if (!requireNamespace("shiny", quietly=TRUE))
         stop("must install.packages(\"shiny\") for this to work")
-    debug <- as.integer(max(0, min(debug, 3))) # put in range from 0 to 3
-    if (is.character(data)) {
-        dataName <- data
-        data <- lapply(dataName, read.oce)
+    # Convert to a lilst of oce objects
+    ndata <- length(objects)
+    if (ndata < 1L)
+        stop("must supply at least one element in 'data'")
+    data <- lapply(objects, function(x) if (is.character(x)) read.oce(x) else x)
+    #?DAN1<<-data
+    # Take just first column of argo data
+    for (i in seq_along(data)) {
+        if (inherits(data[[i]], "argo")) {
+            #.message("i=", i, " is argo")
+            for (name in names(data[[i]]@data)) {
+                #.message("name=",name)
+                if (name %in% c("latitude", "longitude", "time")) {
+                    #.message("name=", name, ": take 1st value")
+                    data[[i]]@data[[name]] <- data[[i]]@data[[name]][1]
+                } else {
+                    #.message("name=", name, ": take 1st column")
+                    data[[i]]@data[[name]] <- data[[i]]@data[[name]][,1, drop=FALSE]
+                }
+            }
+        }
     }
-    shiny::shinyOptions(data=data)
+    #?DAN2<<-data
+    names <- paste0(gsub("\\..*$", "", gsub(".*/","", sapply(data, function(x) x[["filename"]]))))
+    print(file=stderr(), names)
+    shiny::shinyOptions(data=data, names=names, ndata=length(data))
     print(shiny::shinyApp(ui=ui, server=server))
 }
 

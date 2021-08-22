@@ -1,11 +1,12 @@
-## vim:textwidth=100:expandtab:shiftwidth=4:softtabstop=4
+# vim:textwidth=100:expandtab:shiftwidth=4:softtabstop=4
+
 library(argoFloats)
 
 #' @importFrom graphics grid lines mtext par points
 #' @importFrom grDevices gray
 #' @importFrom oce as.ctd read.oce
 #' @importFrom stats predict smooth.spline
-#' @importFrom utils head write.csv
+#' @importFrom utils head read.csv write.csv
 
 appName <- "oceInspect"
 appVersion <- "0.2"
@@ -22,6 +23,7 @@ mgp <- c(2, 0.7, 0)
 keyPressHelp <- "Keystroke commands
 <ul>
 <li> 0: save mouse location as category '0' (and similar for 1 through 9)</li>
+<li> -: remove existing point near mouse location</li>
 <li> u: undo last save</li>
 <li> s: show saved data</li>
 <li> w: write saved data to a csv file</li>
@@ -73,8 +75,10 @@ ui <- shiny::fluidPage(
     shiny::fluidRow(
         shiny::column(7,
             shiny::uiOutput(outputId="UIinfo1")),
-        shiny::column(5,
-            shiny::uiOutput(outputId="UIinfo2"))
+        shiny::column(3,
+            shiny::uiOutput(outputId="UIinfo2")),
+        shiny::column(2,
+            shiny::actionButton("quit", "Quit"))
         ),
     shiny::fluidRow(
         shiny::plotOutput("plot",
@@ -85,7 +89,7 @@ ui <- shiny::fluidPage(
 server <- function(input, output, session)
 {
     lastPoint <- list(view=NULL, x=NULL, y=NULL, i=NULL)
-    allPoints <- list(key=NULL, filename=NULL, view=NULL, x=NULL, y=NULL, i=NULL)
+    buffer <- list(key=NULL, filename=NULL, view=NULL, x=NULL, y=NULL, i=NULL)
     state <- shiny::reactiveValues(
         i=0,
         savedNumber=0,                 # making this reactive means info2 updates when points are saved
@@ -111,25 +115,72 @@ server <- function(input, output, session)
         shiny::selectInput("name", "Name", choices=names, selected=names[1])
     })
 
+    bufferSave <- function()
+    {
+        message("in bufferSave()")
+        if (length(names[state$i])) {
+            csv <- paste0(names[state$i], ".csv")
+            message("csv='", csv, "'")
+            write.csv(as.data.frame(buffer), csv, row.names=FALSE)
+            shiny::showNotification(paste0("Wrote data to '", csv, "'", type="message"))
+        }
+    }
+
+    bufferClear <- function()
+    {
+        message("in bufferClear()")
+        if (length(buffer$x) > 0L) {
+            buffer$key <<- NULL
+            buffer$filename <<- NULL
+            buffer$view <<- NULL
+            buffer$x <<- NULL
+            buffer$y <<- NULL
+            buffer$i <<- NULL
+            state$savedNumber <<- 0L
+        }
+    }
+
+    # update from a csv file, if there is one
+    bufferUpdate <- function()
+    {
+        message("in bufferUpdate()")
+        bufferClear()
+        w <- which(input$name == names)
+        if (length(w)) {
+            state$i <<- w
+            csv <- paste0(names[state$i], ".csv")
+            if (file.exists(csv)) {
+                message("reading from '", csv, "'")
+                d <- read.csv(csv, header=TRUE)
+                buffer$key <<- d$key
+                buffer$filename <<- d$filename
+                buffer$view <<- d$view
+                buffer$x <<- d$x
+                buffer$y <<- d$y
+                buffer$i <<- d$i
+                state$savedNumber <<- length(d$key)
+            } else {
+                message("emptying buffer, since no '", csv, "' with existing data")
+            }
+        }
+    }
+
     shiny::observeEvent(input$name, {
         names <- shiny::getShinyOption("names")
         message(paste0("observeEvent(index); new name (input$name)=", input$name, "; old name ", names[state$i]))
-        if (length(allPoints$x) > 0L) {
-            csv <- paste0(names[state$i], ".csv")
-            message("csv='", csv, "'")
-            write.csv(as.data.frame(allPoints), csv, row.names=FALSE)
-            shiny::showNotification(paste0("Wrote data to '", csv, "'", type="message"))
-            allPoints$key <<- NULL
-            allPoints$filename <<- NULL
-            allPoints$view <<- NULL
-            allPoints$x <<- NULL
-            allPoints$y <<- NULL
-            allPoints$i <<- NULL
-            state$savedNumber <- 0L
+        bufferSave()
+        bufferUpdate()
+        newIndex <- which(input$name == names)
+        if (length(newIndex)) {
+            state$i <<- newIndex[1]
+        } else {
+            shiny::showNotification("observeEvent(input$name): unknown menu value '", input$name, "'", type="error")
         }
-        w <- which(input$name == names)
-        if (length(w))
-            state$i <<- w[1]
+    })
+
+    shiny::observeEvent(input$quit, {
+        bufferSave()
+        shiny::stopApp()
     })
 
     output$UIinfo1 <- shiny::renderUI({
@@ -140,36 +191,84 @@ server <- function(input, output, session)
         shiny::verbatimTextOutput("info2")
     })
 
+    # Find index of data point nearest mouse.  This accounts for the plot
+    # scale, and the plot geometry.
+    #
+    # @param which logical value indicating whether to look in the object's data
+    # slot (the default), or in the buffer of saved values.
+    #
+    # @return list holding `i`, the index of nearest point (or 0 if the plot type
+    # is not handled) and `distance`, the distance at that `i`.
+    nearestIndex <- function(which="data")
+    {
+        if (which== "buffer" && length(buffer$x) < 1L)
+            return(0)
+        data <- if (is.null(state$i) || state$i == 0L) NULL else dataAll[[state$i]]
+        ndata <- length(data[["pressure"]])
+        if (ndata < 1L)
+            return(i=0L, distance=NA)
+        if (input$plotChoice == "TS") {
+            if (which == "buffer") {
+                X <- rep(NA, ndata)
+                Y <- rep(NA, ndata)
+                X[buffer$i] <- data[["SA"]][buffer$i]
+                Y[buffer$i] <- data[["CT"]][buffer$i]
+            } else {
+                X <- data[["SA"]]
+                Y <- data[["CT"]]
+            }
+        } else if (input$plotChoice == "densitySpice") {
+            if (which == "buffer") {
+                X <- rep(NA, ndata)
+                Y <- rep(NA, ndata)
+                X[buffer$i] <- data[["spice"]][buffer$i]
+                Y[buffer$i] <- data[["sigma0"]][buffer$i]
+            } else {
+                X <- data[["spice"]]
+                Y <- data[["sigma0"]]
+            }
+        } else {
+            return(i=0L, distance=NA)
+        }
+        usr <- par("usr") # for scaling (to get closest data point)
+
+        # I tried scaling by pin (and, at times, by fin), but I cannot reconcile those values with
+        # what the geometry of the visible RStudio shiny window.  Since RStudio is very popular, I
+        # gave up on the idea.  So, at the moment, the scaling would make sense if the plot were
+        # square, but otherwise, the user is advised to get very close to a point of interest.
+        #. pin <- par("pin")
+        #. message("pin=", paste(par("pin"), collapse=" "))
+        #. message("fin=", paste(par("fin"), collapse=" "))
+        #. dX <- pin[1] * (input$hover$x - X) / (usr[2] - usr[1])
+        #. dY <- pin[2] * (input$hover$y - Y) / (usr[4] - usr[3])
+        dX <- (input$hover$x - X) / (usr[2] - usr[1])
+        dY <- (input$hover$y - Y) / (usr[4] - usr[3])
+        #. message("dX starts: ", paste(head(dX), collapse=" "))
+        #. message("dY starts: ", paste(head(dY), collapse=" "))
+        d <- sqrt(dX^2 + dY^2)
+        #. message("d starts: ", paste(head(d), collapse=" "))
+        i <- which.min(d)
+        message(sprintf("nearestIndex() has i=%d, dX[i]=%.2f, dY[i]=%.2f, d[i]=%.2f", i, dX[i], dY[i], d[i]))
+        list(i=i, distance=d[i])
+    }
+
     output$info1 <- shiny::renderText({
         #. message("output$info1 with state$i=", state$i)
         rval <- "Click in window to activate hover inspection"
-        data <- dataAll[[state$i]]
         if (!is.null(input$hover$x)) {
-            usr <- par("usr") # for scaling (to get closest data point)
-            pin <- par("pin")
-            if (input$plotChoice == "TS") {
-                X <- data[["SA"]]
-                Y <- data[["CT"]]
+            ni <- nearestIndex("data")
+            #. message("ni$i"=ni$i, ", ni$distance=", ni$distance)
+            i <- ni$i
+            if (i > 0L) {
+                data <- if (is.null(state$i) || state$i == 0L) NULL else dataAll[[state$i]]
                 p <- data[["pressure"]]
-                dX <- pin[1] * (input$hover$x - X) / (usr[2] - usr[1])
-                dY <- pin[2] * (input$hover$y - Y) / (usr[4] - usr[3])
-                d <- dX^2 + dY^2
-                i <- which.min(d)
-            } else if (input$plotChoice == "densitySpice") {
-                X <- data[["spice"]]
-                Y <- data[["sigma0"]]
-                p <- data[["pressure"]]
-                dX <- pin[1] * (input$hover$x - X) / (usr[2] - usr[1])
-                dY <- pin[2] * (input$hover$y - Y) / (usr[4] - usr[3])
-                d <- dX^2 + dY^2
-                i <- which.min(d)
+                rval <- sprintf("x=%.4g y=%.4g near %d-th data point at %.1f dbar",
+                    input$hover$x, input$hover$y, i, p[i])
+                lastPoint$view <<- input$plotChoice
+                lastPoint$x <<- input$hover$x
+                lastPoint$y <<- input$hover$y
+                lastPoint$i <<- i
             }
-            rval <- sprintf("x=%.4g y=%.4g near %d-th data point at %.1f dbar",
-                input$hover$x, input$hover$y, i, p[i])
-            lastPoint$view <<- input$plotChoice
-            lastPoint$x <<- input$hover$x
-            lastPoint$y <<- input$hover$y
-            lastPoint$i <<- i
         }
         rval
     })
@@ -180,18 +279,18 @@ server <- function(input, output, session)
     })
 
     output$plot <- shiny::renderPlot({
-        message("output$plot with state$i=", state$i, " (length(dataAll)=", length(dataAll), ")")
+        #. message("output$plot with state$i=", state$i, " (length(dataAll)=", length(dataAll), ")")
         colNormal <- gray(0.66, alpha=0.9)
         colHighlight <- 2
-        data <- dataAll[[state$i]]
+        data <- if (is.null(state$i) || state$i == 0L) NULL else dataAll[[state$i]]
         if (!is.null(data)) {
             par(mgp=mgp)
             highlight <- rep(FALSE, length(data[["pressure"]]))
             # Since state$savedNumber is altered by adding/removing points,
             # the plot will be kept up-to-date.
             if (state$showSaved && state$savedNumber > 0L) {
-                msg("will overplot with i=", paste(allPoints$i, collapse=" "))
-                highlight[allPoints$i] <- TRUE
+                msg("will overplot with i=", paste(buffer$i, collapse=" "))
+                highlight[buffer$i] <- TRUE
             }
             # Define X and Y for the line, depending on whether it shows data or spline.
             if (input$data == "spline") {
@@ -222,8 +321,8 @@ server <- function(input, output, session)
                         lines(CTD[["SA"]], CTD[["CT"]], lwd=2, col=4)
                     }
                 }
-                if (length(allPoints$i))
-                    points(data[["SA"]][allPoints$i], data[["CT"]][allPoints$i],
+                if (length(buffer$i))
+                    points(data[["SA"]][buffer$i], data[["CT"]][buffer$i],
                         pch=pch, cex=2*cex, col=colHighlight)
             } else if (input$plotChoice == "densitySpice") {
                 par(mar=c(3.5,3.5,1.5,1.5))
@@ -246,8 +345,8 @@ server <- function(input, output, session)
                         lines(CTD[["spice"]], CTD[["sigma0"]], lwd=2, col=4)
                     }
                 }
-                if (length(allPoints$i))
-                    points(data[["spice"]][allPoints$i], data[["sigma0"]][allPoints$i],
+                if (length(buffer$i))
+                    points(data[["spice"]][buffer$i], data[["sigma0"]][buffer$i],
                         pch=pch, cex=2*cex, col=colHighlight)
             }
         }
@@ -319,40 +418,56 @@ server <- function(input, output, session)
         data <- dataAll[[state$i]]
         if (key %in% as.character(0:9) && !is.null(lastPoint$x)) {
             msg(sprintf("%d %f %f %d", as.integer(key), lastPoint$x, lastPoint$y, lastPoint$i))
-            n <- length(allPoints$key)
-            allPoints$key[n+1] <<- as.integer(key)
-            allPoints$filename[n+1] <<- data[["filename"]]
-            allPoints$view[n+1] <<- lastPoint$view
-            allPoints$x[n+1] <<- lastPoint$x
-            allPoints$y[n+1] <<- lastPoint$y
-            allPoints$i[n+1] <<- lastPoint$i
+            n <- length(buffer$key)
+            buffer$key[n+1] <<- as.integer(key)
+            buffer$filename[n+1] <<- data[["filename"]]
+            buffer$view[n+1] <<- lastPoint$view
+            buffer$x[n+1] <<- lastPoint$x
+            buffer$y[n+1] <<- lastPoint$y
+            buffer$i[n+1] <<- lastPoint$i
             state$savedNumber <- state$savedNumber + 1L
-        } else if (key == "u") {
-            n <- length(allPoints$key)
-            if (n > 0L) {
-                allPoints$key <<- head(allPoints$key, -1L)
-                allPoints$filename <<- head(allPoints$filename, -1L)
-                allPoints$view <<- input$plotType
-                allPoints$x <<- head(allPoints$x, -1L)
-                allPoints$y <<- head(allPoints$y, -1L)
-                allPoints$i <<- head(allPoints$i, -1L)
+        } else if (key == "-") {
+            #. message(sprintf("mouse at %.3f %.3f", input$hover$x, input$hover$y))
+            ni <- nearestIndex("buffer")
+            message("keypress '-': ni$i"=ni$i, ", ni$distance=", round(ni$distance, 2))
+            i <- ni$i
+            w <- which(buffer$i == i)
+            if (length(w)) {
+                message("removing buffer entry ", w)
+                buffer$key <<- buffer$key[-w]
+                buffer$filename <<- buffer$filename[-w]
+                buffer$view <<- buffer$view[-w]
+                buffer$x <<- buffer$x[-w]
+                buffer$y <<- buffer$y[-w]
+                buffer$i <<- buffer$i[-w]
                 state$savedNumber <- state$savedNumber - 1L
-                msg("removed last point; new length=", length(allPoints$i), " or ", state$savedNumber)
+            }
+        } else if (key == "u") {
+            n <- length(buffer$key)
+            if (n > 0L) {
+                buffer$key <<- head(buffer$key, -1L)
+                buffer$filename <<- head(buffer$filename, -1L)
+                buffer$view <<- input$plotType
+                buffer$x <<- head(buffer$x, -1L)
+                buffer$y <<- head(buffer$y, -1L)
+                buffer$i <<- head(buffer$i, -1L)
+                state$savedNumber <- state$savedNumber - 1L
+                msg("removed last point; new length=", length(buffer$i), " or ", state$savedNumber)
             }
         } else if (key == "s") {
-            if (length(allPoints$x) < 1L) {
+            if (length(buffer$x) < 1L) {
                 shiny::showNotification("No data to show yet. Press '?' to learn how to save data",
                     type="error")
             } else {
-                print(file=stderr(), as.data.frame(allPoints))
+                print(file=stderr(), as.data.frame(buffer))
             }
         } else if (key == "w") {
             csv <- paste0(names[state$i], ".csv")
-            if (length(allPoints$x) < 1L) {
+            if (length(buffer$x) < 1L) {
                 shiny::showNotification(paste0("No data to write to ", csv, "; Press '?' to learn how to save data"),
                     type="error")
             } else {
-                write.csv(as.data.frame(allPoints), csv, row.names=FALSE)
+                write.csv(as.data.frame(buffer), csv, row.names=FALSE)
                 shiny::showNotification(paste0("Wrote data to '", csv, "'"), type="message")
             }
         } else if (key == "?") {
@@ -429,7 +544,7 @@ oceInspectApp <- function(objects=NULL)
     }
     #?DAN2<<-data
     names <- paste0(gsub("\\..*$", "", gsub(".*/","", sapply(data, function(x) x[["filename"]]))))
-    print(file=stderr(), names)
+    #. print(file=stderr(), names)
     shiny::shinyOptions(data=data, names=names, ndata=length(data))
     print(shiny::shinyApp(ui=ui, server=server))
 }

@@ -8,7 +8,7 @@ Authors@R:
            email = "dan.kelley@dal.ca",
            comment = c(ORCID = "https://orcid.org/0000-0001-7808-5911"))
 Description: Use the mouse to categorize points in a CTD-like object.
-Imports: argoFloats, oce (>= 1.4.0), shiny
+Depends: oce (>= 1.4.0), shiny
 License: GPL (>= 3)
 Encoding: UTF-8
 LazyData: true

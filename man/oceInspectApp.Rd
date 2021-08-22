@@ -9,38 +9,38 @@ oceInspectApp(objects = NULL)
 \arguments{
 \item{objects}{either a list containing either CTD-like oce objects or a names of
 files containing such objects.  For the file-name case, the data are read with
-\code{\link[oce:read.oce]{oce::read.oce()}}.  A CTD-like object is one that holds salinity, temperature, pressure,
-longitude and latitude.}
+\code{\link[oce:read.oce]{oce::read.oce()}}.}
 }
 \description{
-This is an R shiny app that displays the contents of either an argo-class or ctd-class object.
-GUI and keystroke actions permit flagging data points of interest, and the app can save
-a list of such points, for separate processing.  Although simple, this scheme can be useful
-in tasks such as identifying points of interest (e.g. mixed layers, intrusions, erroneous
-data) as part of quality-control processing or scientific analyses.
+This is an R shiny app that displays the contents of CTD-like oce objects, i.e.
+objects that contain salinity, temperature, pressure, longitude and latitude.
+A combination of GUI and keystroke actions (type \verb{?} to list) permit
+flagging data points of interest,
+and the app can save this information in a CSV file, for later processing.
+This can be useful for tasks that benefit from a human eye, including
+identification of features such as mixed layers and intrusions, and of
+various errors that can result during measurement.
 }
 \details{
 GUI controls are provided for selecting the plotted field, and the app also responds to keystrokes.
 A text box shows the current location of the mouse pointer in the (x,y) coordinates of the
-graph, as well as the data point that is nearest.  Pressing the '0' key (or any other numeric
-key, up to '9') saves this information into a buffer along with the name of the input data
-and the present plot view.  Pressing the 'u' key performs an undo operation by removing the
-item that was most recently added to the buffer.  Pressing the 's' key shows the contents
-of this buffer, and pressing 'w' writes those contents to a comma-separated-value file whose
-name, patterned on the name of the input data file, is indicated in a text box above the plot.
+graph, as well as the data point that is nearest.  Pressing the \code{0} key (or any other numeric
+key, up to \code{9}) saves this information into a buffer along with the name of the input data
+and the present plot view.  Points may be removed from this buffer by place the mouse
+on them and typing '-'.
+
+The buffer data may be saved to a CSV file (the name of which is patterned on the input
+filename). This happens if the context is switched (with the "Name" pulldown menu),
+if the \code{w} key is pressed, or if the Quit button is pressed.  If \code{oceInspectApp()} is used
+again in the same directory, it will load such files at startup.
 }
 \examples{
 library(oceInspect)
-# Example 1: argo file (specified as an oce object)
+# Handle an argo file and a ctd file.
 if (interactive()) {
     f1 <- system.file("extdata/R6903548_029.nc", package="oceInspect")
-    d1 <- oce::read.oce(f1)
-    oceInspectApp(d1)
-}
-# Example 2: ctd file (specified by name)
-if (interactive()) {
-    f2 <- system.file("extdata/ctd.cnv", package="oceInspect")
-    oceInspectApp(f2)
+    f2 <- system.file("extdata/BED0302.cnv", package="oceInspect")
+    oceInspectApp(c(f1, f2))
 }
 
 }

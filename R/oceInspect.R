@@ -299,9 +299,16 @@ server <- function(input, output, session)
             i <- ni$i
             if (i > 0L) {
                 data <- if (is.null(state$i) || state$i == 0L) NULL else dataAll[[state$i]]
-                p <- data[["pressure"]]
-                rval <- sprintf("x=%.4g y=%.4g near %d-th data point at %.1f dbar",
-                    input$hover$x, input$hover$y, i, p[i])
+                #p <- data[["pressure"]]
+                #rval <- sprintf("x=%.4g y=%.4g near %d-th data point at %.1f dbar",
+                #    input$hover$x, input$hover$y, i, p[i])
+                if (i %in% buffer$i) {
+                    rval <- sprintf("x=%.4g y=%.4g near point #%d (#%d in buffer)",
+                        input$hover$x, input$hover$y, i, which(buffer$i == i))
+                } else {
+                    rval <- sprintf("x=%.4g y=%.4g near point #%d",
+                        input$hover$x, input$hover$y, i)
+                }
                 lastPoint$view <<- input$plotChoice
                 lastPoint$x <<- input$hover$x
                 lastPoint$y <<- input$hover$y
@@ -317,7 +324,7 @@ server <- function(input, output, session)
     })
 
     output$plot <- shiny::renderPlot({
-        message("output$plot: buffer (length=", state$bufferLength, "): ", paste(buffer$i, collapse=" "))
+        msg("output$plot: buffer (length=", state$bufferLength, "): ", paste(buffer$i, collapse=" "))
         colNormal <- gray(0.66, alpha=0.9)
         emphasize <- list(cex=1.4, lwd=3, col=2)
         data <- if (is.null(state$i) || state$i == 0L) NULL else dataAll[[state$i]]

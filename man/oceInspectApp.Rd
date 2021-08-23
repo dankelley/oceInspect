@@ -38,7 +38,7 @@ again in the same directory, it will load such files at startup.
 library(oceInspect)
 # Handle an argo file and a ctd file.
 if (interactive()) {
-    f1 <- system.file("extdata/R6903548_029.nc", package="oceInspect")
+    f1 <- system.file("extdata/D6903548_029.nc", package="oceInspect")
     f2 <- system.file("extdata/BED0302.cnv", package="oceInspect")
     oceInspectApp(c(f1, f2))
 }

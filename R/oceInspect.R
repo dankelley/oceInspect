@@ -53,7 +53,11 @@ ui <- shiny::fluidPage(
             shiny::uiOutput(outputId="nameUI")),
         shiny::column(4,
             shiny::selectInput("plotChoice", "View",
-                choices=c("T-S"="TS", "\u03C3-\u03C0"="densitySpice", "\u03C3 Profile"="densityProfile"),
+                choices=c("T-S"="TS",
+                    "\u03C3-\u03C0"="densitySpice",
+                    "\u03C3 Profile"="densityProfile",
+                    "S Profile"="SProfile",
+                    "T Profile"="TProfile"),
                 selected="Temperature-Salinity")),
         shiny::column(3,
             shiny::selectInput("plotType", "Type",
@@ -83,7 +87,7 @@ ui <- shiny::fluidPage(
         ),
     shiny::fluidRow(
         shiny::plotOutput("plot",
-            hover=shiny::hoverOpts("hover"),
+            hover=shiny::hoverOpts("hover", delay=100),
             brush=shiny::brushOpts("brush", delay=2000, resetOnNew=TRUE)))
     )
 
@@ -174,7 +178,7 @@ server <- function(input, output, session)
         bufferUpdate()
         newIndex <- which(input$name == names)
         state$bufferLength <- length(buffer$i)
-        message("observeEvent(input$name): buffer (length=", state$bufferLength, "): ", paste(buffer$i, collapse=" "))
+        msg("observeEvent(input$name): buffer (length=", state$bufferLength, "): ", paste(buffer$i, collapse=" "))
         if (length(newIndex)) {
             state$i <<- newIndex[1]
         } else {
@@ -241,7 +245,27 @@ server <- function(input, output, session)
                 X <- data[["sigma0"]]
                 Y <- data[["z"]]
             }
-        } else {
+        } else if (input$plotChoice == "SProfile") {
+            if (which == "buffer" && state$bufferLength > 0L) {
+                X <- rep(NA, ndata)
+                Y <- rep(NA, ndata)
+                X[buffer$i] <- data[["SA"]][buffer$i]
+                Y[buffer$i] <- data[["z"]][buffer$i]
+            } else {
+                X <- data[["SA"]]
+                Y <- data[["z"]]
+            }
+        } else if (input$plotChoice == "TProfile") {
+            if (which == "buffer" && state$bufferLength > 0L) {
+                X <- rep(NA, ndata)
+                Y <- rep(NA, ndata)
+                X[buffer$i] <- data[["CT"]][buffer$i]
+                Y[buffer$i] <- data[["z"]][buffer$i]
+            } else {
+                X <- data[["CT"]]
+                Y <- data[["z"]]
+            }
+         } else {
             return(i=0L, distance=NA)
         }
         usr <- par("usr") # for scaling (to get closest data point)
@@ -303,11 +327,11 @@ server <- function(input, output, session)
             highlight <- rep(FALSE, length(data[["pressure"]]))
             # Since state$savedNumber is altered by adding/removing points,
             # the plot will be kept up-to-date.
-            if (state$showSaved && state$savedNumber > 0L) {
+            if (state$showSaved && state$bufferLength > 0L) {
                 #. msg("will overplot with i=", paste(buffer$i, collapse=" "))
                 highlight[buffer$i] <- TRUE
             }
-            # Define X and Y for the line, depending on whether it shows data or spline.
+            # Define a spline with e.g. S=S(z), with  degree of freedom df=ndata/input$Ndf.
             if (input$data == "spline") {
                 pressure <- data[["pressure"]]
                 df <- length(pressure) / max(1L, as.integer(input$Ndf))
@@ -324,65 +348,91 @@ server <- function(input, output, session)
                 type <- maybeNull(input$plotType, "o")
                 if (type %in% c("p", "o"))
                     points(data[["SA"]], data[["CT"]], pch=pch, col=colNormal, cex=cex)
-                # Lines are black for data, blue for spline
                 if (type %in% c("l", "o")) {
-                    if (input$data == "raw") {
-                        lines(data[["SA"]], data[["CT"]], lwd=2, col=colNormal)
-                    } else {
-                        lines(CTD[["SA"]], CTD[["CT"]], lwd=2, col=4)
-                    }
+                    if (input$data == "raw") lines(data[["SA"]], data[["CT"]], lwd=2, col=colNormal)
+                    else lines(CTD[["SA"]], CTD[["CT"]], lwd=2, col=4)
                 }
                 if (haveBuffer)
                     points(data[["SA"]][buffer$i], data[["CT"]][buffer$i],
                         pch=emphasize$pch, cex=emphasize$cex, lwd=emphasize$lwd, col=emphasize$col)
             } else if (input$plotChoice == "densitySpice") {
                 par(mar=c(3.5,3.5,1.5,1.5))
-                plot(data[["spice"]], data[["sigma0"]], ylim=rev(range(data[["sigma0"]], na.rm=TRUE)),
+                spice <- data[["spice"]]
+                sigma0 <- data[["sigma0"]]
+                plot(spice, sigma0, ylim=rev(range(data[["sigma0"]], na.rm=TRUE)),
                     xlab=oce::resizableLabel("spice"),
                     ylab=oce::resizableLabel("sigma0"),
                     type="n", pch=pch, cex=cex, col=colNormal)
                 grid()
                 type <- maybeNull(input$plotType, "o")
                 if (type %in% c("p", "o"))
-                    points(data[["spice"]], data[["sigma0"]], pch=pch, col=colNormal, cex=cex)
-                # Lines are black for data, blue for spline
+                    points(spice, sigma0, pch=pch, col=colNormal, cex=cex)
                 if (type %in% c("l", "o")) {
-                    if (input$data == "raw") {
-                        lines(data[["spice"]], data[["sigma0"]], lwd=2, col=colNormal)
-                    } else {
-                        lines(CTD[["spice"]], CTD[["sigma0"]], lwd=2, col=4)
-                    }
+                    if (input$data == "raw") lines(spice, sigma0, lwd=2, col=colNormal)
+                    else lines(CTD[["spice"]], CTD[["sigma0"]], lwd=2, col=4)
                 }
                 if (haveBuffer)
-                    points(data[["spice"]][buffer$i], data[["sigma0"]][buffer$i],
+                    points(spice[buffer$i], sigma0[buffer$i],
                         pch=emphasize$pch, cex=emphasize$cex, lwd=emphasize$lwd, col=emphasize$col)
             } else if (input$plotChoice == "densityProfile") {
                 par(mar=c(3.5,3.5,1.5,1.5))
-                # Extract sigma0 and z. Note that CTD objects respond to [["z"]],
-                # but that argo objects do not, for oce versions before 1.5.0
+                # CTD objects respond to [["z"]], but argo objects do not, if oce < 1.5.0
                 sigma0 <- data[["sigma0"]]
-                # 
                 z <- oce::swZ(data[["pressure"]], data[["longitude"]][1])
-                message("x range: ", paste(range(data[["sigma0"]], na.rm=TRUE), collapse=" "))
-                message("y range: ", paste(range(z, na.rm=TRUE), collapse=" "))
-                plot(data[["sigma0"]], z,
+                plot(sigma0, z,
                     xlab=oce::resizableLabel("sigma0"),
                     ylab=oce::resizableLabel("z"),
                     type="n", pch=pch, cex=cex, col=colNormal)
                 grid()
                 type <- maybeNull(input$plotType, "o")
                 if (type %in% c("p", "o"))
-                    points(data[["sigma0"]], data[["z"]], pch=pch, col=colNormal, cex=cex)
-                # Lines are black for data, blue for spline
+                    points(sigma0, z, pch=pch, col=colNormal, cex=cex)
                 if (type %in% c("l", "o")) {
-                    if (input$data == "raw") {
-                        lines(data[["sigma0"]], data[["z"]], lwd=2, col=colNormal)
-                    } else {
-                        lines(CTD[["sigma0"]], CTD[["z"]], lwd=2, col=4)
-                    }
+                    if (input$data == "raw") lines(sigma0, z, lwd=2, col=colNormal)
+                    else lines(CTD[["sigma0"]], CTD[["z"]], lwd=2, col=4)
                 }
                 if (haveBuffer)
-                    points(data[["sigma0"]][buffer$i], data[["z"]][buffer$i],
+                    points(sigma0[buffer$i], z[buffer$i],
+                        pch=emphasize$pch, cex=emphasize$cex, lwd=emphasize$lwd, col=emphasize$col)
+            } else if (input$plotChoice == "SProfile") {
+                par(mar=c(3.5,3.5,1.5,1.5))
+                # CTD objects respond to [["z"]], but argo objects do not, if oce < 1.5.0
+                SA <- data[["SA"]]
+                z <- oce::swZ(data[["pressure"]], data[["longitude"]][1])
+                plot(SA, z,
+                    xlab=oce::resizableLabel("SA"),
+                    ylab=oce::resizableLabel("z"),
+                    type="n", pch=pch, cex=cex, col=colNormal)
+                grid()
+                type <- maybeNull(input$plotType, "o")
+                if (type %in% c("p", "o"))
+                    points(SA, z, pch=pch, col=colNormal, cex=cex)
+                if (type %in% c("l", "o")) {
+                    if (input$data == "raw") lines(SA, z, lwd=2, col=colNormal)
+                    else lines(CTD[["SA"]], CTD[["z"]], lwd=2, col=4)
+                }
+                if (haveBuffer)
+                    points(SA[buffer$i], z[buffer$i],
+                        pch=emphasize$pch, cex=emphasize$cex, lwd=emphasize$lwd, col=emphasize$col)
+            } else if (input$plotChoice == "TProfile") {
+                par(mar=c(3.5,3.5,1.5,1.5))
+                # CTD objects respond to [["z"]], but argo objects do not, if oce < 1.5.0
+                CT <- data[["CT"]]
+                z <- oce::swZ(data[["pressure"]], data[["longitude"]][1])
+                plot(CT, z,
+                    xlab=oce::resizableLabel("CT"),
+                    ylab=oce::resizableLabel("z"),
+                    type="n", pch=pch, cex=cex, col=colNormal)
+                grid()
+                type <- maybeNull(input$plotType, "o")
+                if (type %in% c("p", "o"))
+                    points(CT, z, pch=pch, col=colNormal, cex=cex)
+                if (type %in% c("l", "o")) {
+                    if (input$data == "raw") lines(CT, z, lwd=2, col=colNormal)
+                    else lines(CTD[["CT"]], CTD[["z"]], lwd=2, col=4)
+                }
+                if (haveBuffer)
+                    points(CT[buffer$i], z[buffer$i],
                         pch=emphasize$pch, cex=emphasize$cex, lwd=emphasize$lwd, col=emphasize$col)
             }
         }
@@ -489,7 +539,7 @@ server <- function(input, output, session)
 #' library(oceInspect)
 #' # Handle an argo file and a ctd file.
 #' if (interactive()) {
-#'     f1 <- system.file("extdata/R6903548_029.nc", package="oceInspect")
+#'     f1 <- system.file("extdata/D6903548_029.nc", package="oceInspect")
 #'     f2 <- system.file("extdata/BED0302.cnv", package="oceInspect")
 #'     oceInspectApp(c(f1, f2))
 #' }
@@ -501,25 +551,16 @@ oceInspectApp <- function(objects=NULL)
 {
     if (!requireNamespace("shiny", quietly=TRUE))
         stop("must install.packages(\"shiny\") for this to work")
-    # Convert to a lilst of oce objects
+    # Convert to a list of oce objects
     ndata <- length(objects)
     if (ndata < 1L)
         stop("must supply at least one element in 'data'")
     data <- lapply(objects, function(x) if (is.character(x)) read.oce(x) else x)
+    # For argo data, we focus on the first profile within a cycle, since the other profiles (if they
+    # exist) are usually almost all NA values.
     for (i in seq_along(data)) {
-        if (inherits(data[[i]], "argo")) {
-            #. msg("i=", i, " is argo")
-            for (name in names(data[[i]]@data)) {
-                #. msg("name=",name)
-                if (name %in% c("latitude", "longitude", "time")) {
-                    #. msg("name=", name, ": take 1st value")
-                    data[[i]]@data[[name]] <- data[[i]]@data[[name]][1]
-                } else {
-                    #. msg("name=", name, ": take 1st column")
-                    data[[i]]@data[[name]] <- data[[i]]@data[[name]][,1, drop=FALSE]
-                }
-            }
-        }
+        if (inherits(data[[i]], "argo"))
+            data[[i]] <- data[[i]][["profile", 1]]
     }
     names <- paste0(gsub("\\..*$", "", gsub(".*/","", sapply(data, function(x) x[["filename"]]))))
     #. print(file=stderr(), names)

@@ -3,9 +3,6 @@
 # FIXME:
 # 1. do I need lastPoint?
 # 2. why do I need to reclick when removing points?
-# 3. add T(z)
-# 4. add S(z)
-# [ ] buffer length box is wrong
 
 library(argoFloats)
 

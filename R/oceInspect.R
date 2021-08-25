@@ -71,8 +71,12 @@ ui <- shiny::fluidPage(
                     5, 1, 10, step=1))),
         shiny::column(1,
             shiny::checkboxInput("showSaved", "Hilite", TRUE)),
-        shiny::column(1,
-            shiny::checkboxInput("debug", "Debug", FALSE))
+        shiny::column(2,
+            shiny::checkboxInput("debug", "Debug", FALSE)),
+        #shiny::column(2,
+        #    shiny::actionButton("zoom", "Zoom")),
+        shiny::column(2,
+            shiny::actionButton("unzoom", "Unzoom"))
         ),
     shiny::fluidRow(
         shiny::column(7,
@@ -98,10 +102,12 @@ server <- function(input, output, session)
     }
     lastPoint <- list(view=NULL, x=NULL, y=NULL, i=NULL)
     buffer <- list(key=NULL, filename=NULL, view=NULL, x=NULL, y=NULL, i=NULL)
+    # Later assignments to state will cause a redraw.
     state <- shiny::reactiveValues(
         i=0,
-        bufferLength=0L,               # making this reactive means info2 updates when points are saved
-        showSaved=FALSE)               # see "Options" UI element
+        bufferLength=0L,
+        showSaved=FALSE,
+        focus=NULL)
     dataAll <- shiny::getShinyOption("data")
     names <- shiny::getShinyOption("names")
     msg("names: ", paste(names, collapse=" "))
@@ -176,6 +182,7 @@ server <- function(input, output, session)
         newIndex <- which(input$name == names)
         state$bufferLength <- length(buffer$i)
         msg("observeEvent(input$name): buffer (length=", state$bufferLength, "): ", paste(buffer$i, collapse=" "))
+        state$focus <<- NULL           # forget any existing zoom from a previous dataset
         if (length(newIndex)) {
             state$i <<- newIndex[1]
         } else {
@@ -194,6 +201,11 @@ server <- function(input, output, session)
 
     output$UIinfo2 <- shiny::renderUI({
         shiny::verbatimTextOutput("info2")
+    })
+
+    observeEvent(input$plotChoice, {
+        message("resetting 'focus' for new plot choice")
+        state$focus <<- NULL           # forget any existing zoom from a previous plot choice
     })
 
     # Find index of data point nearest mouse.  This accounts for the plot
@@ -346,8 +358,15 @@ server <- function(input, output, session)
             }
             if (input$plotChoice == "TS") {
                 par(mar=c(3.5,3.5,1.5,1.5))
-                oce::plotTS(data, eos="gsw",
-                    type="n", pch=pch, cex=cex, col=colNormal)
+                if (is.null(state$focus)) {
+                    oce::plotTS(data,
+                        eos="gsw", type="n", pch=pch, cex=cex, col=colNormal)
+                } else {
+                    oce::plotTS(data,
+                        xlim=c(state$focus$xmin, state$focus$xmax),
+                        ylim=c(state$focus$ymin, state$focus$ymax),
+                        eos="gsw", type="n", pch=pch, cex=cex, col=colNormal)
+                }
                 grid()
                 type <- maybeNull(input$plotType, "o")
                 if (type %in% c("p", "o"))
@@ -363,10 +382,19 @@ server <- function(input, output, session)
                 par(mar=c(3.5,3.5,1.5,1.5))
                 spice <- data[["spice"]]
                 sigma0 <- data[["sigma0"]]
-                plot(spice, sigma0, ylim=rev(range(data[["sigma0"]], na.rm=TRUE)),
-                    xlab=oce::resizableLabel("spice"),
-                    ylab=oce::resizableLabel("sigma0"),
-                    type="n", pch=pch, cex=cex, col=colNormal)
+                if (is.null(state$focus)) {
+                    plot(spice, sigma0, ylim=rev(range(data[["sigma0"]], na.rm=TRUE)),
+                        xlab=oce::resizableLabel("spice"),
+                        ylab=oce::resizableLabel("sigma0"),
+                        type="n", pch=pch, cex=cex, col=colNormal)
+                } else {
+                    plot(spice, sigma0,
+                        xlim=c(state$focus$xmin, state$focus$xmax),
+                        ylim=c(state$focus$ymin, state$focus$ymax),
+                        xlab=oce::resizableLabel("spice"),
+                        ylab=oce::resizableLabel("sigma0"),
+                        type="n", pch=pch, cex=cex, col=colNormal)
+                }
                 grid()
                 type <- maybeNull(input$plotType, "o")
                 if (type %in% c("p", "o"))
@@ -383,10 +411,19 @@ server <- function(input, output, session)
                 # CTD objects respond to [["z"]], but argo objects do not, if oce < 1.5.0
                 sigma0 <- data[["sigma0"]]
                 z <- oce::swZ(data[["pressure"]], data[["longitude"]][1])
-                plot(sigma0, z,
-                    xlab=oce::resizableLabel("sigma0"),
-                    ylab=oce::resizableLabel("z"),
-                    type="n", pch=pch, cex=cex, col=colNormal)
+                if (is.null(state$focus)) {
+                    plot(sigma0, z,
+                        xlab=oce::resizableLabel("sigma0"),
+                        ylab=oce::resizableLabel("z"),
+                        type="n", pch=pch, cex=cex, col=colNormal)
+                } else {
+                    plot(sigma0, z,
+                        xlim=c(state$focus$xmin, state$focus$xmax),
+                        ylim=c(state$focus$ymin, state$focus$ymax),
+                        xlab=oce::resizableLabel("sigma0"),
+                        ylab=oce::resizableLabel("z"),
+                        type="n", pch=pch, cex=cex, col=colNormal)
+                }
                 grid()
                 type <- maybeNull(input$plotType, "o")
                 if (type %in% c("p", "o"))
@@ -403,10 +440,19 @@ server <- function(input, output, session)
                 # CTD objects respond to [["z"]], but argo objects do not, if oce < 1.5.0
                 SA <- data[["SA"]]
                 z <- oce::swZ(data[["pressure"]], data[["longitude"]][1])
-                plot(SA, z,
-                    xlab=oce::resizableLabel("SA"),
-                    ylab=oce::resizableLabel("z"),
-                    type="n", pch=pch, cex=cex, col=colNormal)
+                if (is.null(state$focus)) {
+                    plot(SA, z,
+                        xlab=oce::resizableLabel("SA"),
+                        ylab=oce::resizableLabel("z"),
+                        type="n", pch=pch, cex=cex, col=colNormal)
+                } else {
+                    plot(SA, z,
+                        xlim=c(state$focus$xmin, state$focus$xmax),
+                        ylim=c(state$focus$ymin, state$focus$ymax),
+                        xlab=oce::resizableLabel("SA"),
+                        ylab=oce::resizableLabel("z"),
+                        type="n", pch=pch, cex=cex, col=colNormal)
+                }
                 grid()
                 type <- maybeNull(input$plotType, "o")
                 if (type %in% c("p", "o"))
@@ -423,10 +469,19 @@ server <- function(input, output, session)
                 # CTD objects respond to [["z"]], but argo objects do not, if oce < 1.5.0
                 CT <- data[["CT"]]
                 z <- oce::swZ(data[["pressure"]], data[["longitude"]][1])
-                plot(CT, z,
-                    xlab=oce::resizableLabel("CT"),
-                    ylab=oce::resizableLabel("z"),
-                    type="n", pch=pch, cex=cex, col=colNormal)
+                if (is.null(state$focus)) {
+                    plot(CT, z,
+                        xlab=oce::resizableLabel("CT"),
+                        ylab=oce::resizableLabel("z"),
+                        type="n", pch=pch, cex=cex, col=colNormal)
+                } else {
+                    plot(CT, z,
+                        xlim=c(state$focus$xmin, state$focus$xmax),
+                        ylim=c(state$focus$ymin, state$focus$ymax),
+                        xlab=oce::resizableLabel("CT"),
+                        ylab=oce::resizableLabel("z"),
+                        type="n", pch=pch, cex=cex, col=colNormal)
+                }
                 grid()
                 type <- maybeNull(input$plotType, "o")
                 if (type %in% c("p", "o"))
@@ -441,6 +496,27 @@ server <- function(input, output, session)
             }
         }
     }, height=plotHeight, pointsize=16)
+
+    #. shiny::observeEvent(input$zoom, {
+    #.     message("should zoom now")
+    #.     if (is.null(state$focus)) {
+    #.         shiny::showNotification("Please brush the region to zoom")
+    #.     } else {
+    #.         message("FIXME: do the zoom")
+    #.     }
+    #. })
+
+    shiny::observeEvent(input$unzoom, {
+        state$focus <<- NULL
+    })
+
+    shiny::observeEvent(input$brush, {
+        message(sprintf("brush %.3f %.3f %.3f %.3f",
+                input$brush$xmin, input$brush$xmax, input$brush$ymin, input$brush$ymax))
+        state$focus <<- with(input$brush,
+            list(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax))
+        print(file=stderr(), state$focus)
+    })
 
     shiny::observeEvent(input$showSaved, {
         state$showSaved <<- input$showSaved

@@ -61,14 +61,14 @@ ui <- shiny::fluidPage(
                 choices=c("Point"="p", "Line"="l", "Both"="o"),
                 selected="o"))),
     shiny::fluidRow(
-        shiny::column(2,
+        shiny::column(3,
             shiny::selectInput("data", "Data",
                 choices=c("Raw"="raw", "Spline"="spline"),
                 selected="Raw")),
         shiny::conditionalPanel("input.data == 'spline'",
-            shiny::column(2,
-                shiny::numericInput("Ndf", "N/df",
-                    5, 1, 10, step=1))),
+            shiny::column(3,
+                shiny::sliderInput("smoothness", "Smoothing",
+                    1, 10, 5))),
         shiny::column(1,
             shiny::checkboxInput("showSaved", "Hilite", TRUE)),
         shiny::column(2,
@@ -347,11 +347,11 @@ server <- function(input, output, session)
                 #. msg("will overplot with i=", paste(buffer$i, collapse=" "))
                 highlight[buffer$i] <- TRUE
             }
-            # Define a spline with e.g. S=S(z), with  degree of freedom df=ndata/input$Ndf.
+            # Define a spline with e.g. S=S(z), with  degree of freedom df=ndata/input$smoothness
             if (input$data == "spline") {
                 pressure <- data[["pressure"]]
-                df <- length(pressure) / max(1L, as.integer(input$Ndf))
-                P <- seq(min(pressure), max(pressure), 1)
+                df <- length(pressure) / max(1L, as.integer(input$smoothness))
+                P <- seq(min(pressure), max(pressure), length.out=5*length(pressure))
                 S <- predict(smooth.spline(pressure, data[["salinity"]], df=df), P)$y
                 T <- predict(smooth.spline(pressure, data[["temperature"]], df=df), P)$y
                 CTD <- as.ctd(S, T, P, longitude=data[["longitude"]], latitude=data[["latitude"]])
@@ -511,11 +511,10 @@ server <- function(input, output, session)
     })
 
     shiny::observeEvent(input$brush, {
-        message(sprintf("brush %.3f %.3f %.3f %.3f",
+        msg(sprintf("brush %.3f %.3f %.3f %.3f",
                 input$brush$xmin, input$brush$xmax, input$brush$ymin, input$brush$ymax))
         state$focus <<- with(input$brush,
             list(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax))
-        print(file=stderr(), state$focus)
     })
 
     shiny::observeEvent(input$showSaved, {

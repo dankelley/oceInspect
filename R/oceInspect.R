@@ -308,15 +308,15 @@ server <- function(input, output, session)
             i <- ni$i
             if (i > 0L) {
                 data <- if (is.null(state$i) || state$i == 0L) NULL else dataAll[[state$i]]
-                #p <- data[["pressure"]]
-                #rval <- sprintf("x=%.4g y=%.4g near %d-th data point at %.1f dbar",
-                #    input$hover$x, input$hover$y, i, p[i])
+                # p <- data[["pressure"]]
+                # rval <- sprintf("x=%.4g y=%.4g near %d-th data point at %.1f dbar",
+                #     input$hover$x, input$hover$y, i, p[i])
                 if (i %in% buffer$i) {
-                    rval <- sprintf("x=%.4g y=%.4g near point #%d (#%d in buffer)",
-                        input$hover$x, input$hover$y, i, which(buffer$i == i))
+                    rval <- sprintf("x=%.3g y=%.3g near #%d at %.1fdbar (#%d in buffer)",
+                        input$hover$x, input$hover$y, i, data[["pressure"]][i], which(buffer$i == i))
                 } else {
-                    rval <- sprintf("x=%.4g y=%.4g near point #%d",
-                        input$hover$x, input$hover$y, i)
+                    rval <- sprintf("x=%.3g y=%.3g near #%d at %.1fdbar",
+                        input$hover$x, input$hover$y, i, data[["pressure"]][i])
                 }
                 lastPoint$view <<- input$plotChoice
                 lastPoint$x <<- input$hover$x

@@ -105,7 +105,7 @@ server <- function(input, output, session)
             cat(file=stderr(), ..., eol)
     }
     lastPoint <- list(view=NULL, x=NULL, y=NULL, i=NULL)
-    buffer <- list(key=NULL, filename=NULL, view=NULL, x=NULL, y=NULL, i=NULL)
+    buffer <- list(key=NULL, filename=NULL, view=NULL, x=NULL, y=NULL, i=NULL, salinity=NULL, temperature=NULL, pressure=NULL)
     # Later assignments to state will cause a redraw.
     state <- shiny::reactiveValues(
         i=0,
@@ -145,6 +145,9 @@ server <- function(input, output, session)
             buffer$x <<- NULL
             buffer$y <<- NULL
             buffer$i <<- NULL
+            buffer$salinity <<- NULL
+            buffer$temperature <<- NULL
+            buffer$pressure <<- NULL
             state$savedNumber <<- 0L
         }
     }
@@ -167,6 +170,10 @@ server <- function(input, output, session)
                 buffer$x <<- d$x
                 buffer$y <<- d$y
                 buffer$i <<- d$i
+                # Round, because write.csv otherwise spews out junk digits.
+                buffer$salinity <<- round(d$salinity, 5)
+                buffer$temperature <<- round(d$temperature, 5)
+                buffer$pressure <<- round(d$pressure, 3)
                 state$savedNumber <<- length(d$key)
             } else {
                 msg("emptying buffer, since no '", csv, "' with existing data")
@@ -544,6 +551,9 @@ server <- function(input, output, session)
             buffer$x[n + 1L] <<- lastPoint$x
             buffer$y[n + 1L] <<- lastPoint$y
             buffer$i[n + 1L] <<- lastPoint$i
+            buffer$salinity[n + 1L] <<- data[["salinity"]][lastPoint$i]
+            buffer$temperature[n + 1L] <<- data[["temperature"]][lastPoint$i]
+            buffer$pressure[n + 1L] <<- data[["pressure"]][lastPoint$i]
             state$bufferLength <- n + 1L
         } else if (key == "-" || key == "d") {
             #. msg(sprintf("mouse at %.3f %.3f", input$hover$x, input$hover$y))
@@ -559,6 +569,9 @@ server <- function(input, output, session)
                 buffer$x <<- buffer$x[-w]
                 buffer$y <<- buffer$y[-w]
                 buffer$i <<- buffer$i[-w]
+                buffer$salinity <<- buffer$salinity[-w]
+                buffer$temperature <<- buffer$temperature[-w]
+                buffer$pressure <<- buffer$pressure[-w]
                 state$bufferLength <<- state$bufferLength - 1L # this is reactive
             }
         } else if (key == "u") {
@@ -570,11 +583,15 @@ server <- function(input, output, session)
                 buffer$x <<- head(buffer$x, -1L)
                 buffer$y <<- head(buffer$y, -1L)
                 buffer$i <<- head(buffer$i, -1L)
+                buffer$salinity <<- head(buffer$salinity, -1L)
+                buffer$temperature <<- head(buffer$temperature, -1L)
+                buffer$pressure <<- head(buffer$pressure, -1L)
                 state$bufferLength <<- state$bufferLength - 1L # this is reactive
             }
         } else if (key == "b") {
+            message("DAN: b was pressed")
             if (length(buffer$x) < 1L) {
-                shiny::showNotification("No data to show yet. Press '?' to learn how to save data",
+                shiny::showNotification("Empty buffer. Press '?' to learn how to store in the buffer.",
                     type="error")
             } else {
                 print(file=stderr(), as.data.frame(buffer))
@@ -585,8 +602,9 @@ server <- function(input, output, session)
                 shiny::showNotification(paste0("No data to write to ", csv, "; Press '?' to learn how to save data"),
                     type="error")
             } else {
-                write.csv(as.data.frame(buffer), csv, row.names=FALSE)
-                shiny::showNotification(paste0("Wrote data to '", csv, "'"), type="message")
+                #? write.csv(as.data.frame(buffer), csv, row.names=FALSE)
+                #? shiny::showNotification(paste0("Wrote data to '", csv, "'"), type="message")
+                bufferSave()
             }
         } else if (key == "?") {
             shiny::showModal(shiny::modalDialog(title="Key-stroke commands",

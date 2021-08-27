@@ -32,7 +32,7 @@ keyPressHelp <- "Keystroke commands
 <li> '?': display this window</li>
 </ul>"
 
-startupMessage <- HTML("<p>Use GUI elements to navigate between datasets and view.</p><p>Hovering the mouse over a point shows information about it in the left-hand information box.  While over a point, type a number from <b>0</b> to <b>9</b>, to store the index of the nearest data point in a buffer.  The most recently added point may be removed by typing the <b>u</b> key.  Individual buffer points may be removed by hovering carefully over them and pressing either the <b>d</b> or <b>-</b> key. Type <b>b</b> to show the buffer contents in the R console.</p><p>Type <b>w</b> to write a CSV file containing the buffer. The buffer is also written automically if the dataset is changed via the pulldown menu. Note that the buffer CSV file is named ater the dataset name, which will cause problems if your dataset names collide.  Also, note that matching CSV files are loaded at launch time, so that you can continue with previous analyses.</p><p>A list of keystroke commands is revealed by typing <b>?</b>. In a console, use <b>?oceInspectApp</b> to learn more.</p>")
+startupMessage <- HTML("<p>Use GUI elements to navigate between datasets and views.  These elements are designed to be reasonably self-describing.</p><p>Hovering the mouse over a point shows information about it in the left-hand information box.  While over a point, type a number from <b>0</b> to <b>9</b>, to store the index of the nearest data point in a buffer.  The most recently added point may be removed by typing the <b>u</b> key.  Individual buffer points may be removed by hovering carefully over them and pressing either the <b>d</b> or <b>-</b> key. Type <b>b</b> to show the buffer contents in the R console.</p><p>Type <b>w</b> to write a CSV file containing the buffer. The buffer is also written automically if the dataset is changed via the pulldown menu. Note that the buffer CSV file is named ater the dataset name, which will cause problems if your dataset names collide.  Also, note that matching CSV files are loaded at launch time, so that you can continue with previous analyses.</p><p>A list of keystroke commands is revealed by typing <b>?</b>. In a console, use <b>?oceInspectApp</b> to learn more.</p>")
 
 maybeNull <- function(x, default)
     if (is.null(x)) default else x
@@ -610,8 +610,8 @@ server <- function(input, output, session)
 #' A text box shows the current location of the mouse pointer in the (x,y) coordinates of the
 #' graph, as well as the data point that is nearest.  Pressing the `0` key (or any other numeric
 #' key, up to `9`) saves this information into a buffer along with the name of the input data
-#' and the present plot view.  Points may be removed from this buffer by place the mouse
-#' on them and typing '-'.
+#' and the present plot view.  Points may be removed from this buffer by placing the mouse
+#' precisely on top of them and then typing '-' or 'd'.
 #'
 #' The buffer data may be saved to a CSV file (the name of which is patterned on the input
 #' filename). This happens if the context is switched (with the "Dataset" pulldown menu),

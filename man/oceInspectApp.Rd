@@ -26,8 +26,8 @@ GUI controls are provided for selecting the plotted field, and the app also resp
 A text box shows the current location of the mouse pointer in the (x,y) coordinates of the
 graph, as well as the data point that is nearest.  Pressing the \code{0} key (or any other numeric
 key, up to \code{9}) saves this information into a buffer along with the name of the input data
-and the present plot view.  Points may be removed from this buffer by place the mouse
-on them and typing '-'.
+and the present plot view.  Points may be removed from this buffer by placing the mouse
+precisely on top of them and then typing '-' or 'd'.
 
 The buffer data may be saved to a CSV file (the name of which is patterned on the input
 filename). This happens if the context is switched (with the "Dataset" pulldown menu),

@@ -23,13 +23,16 @@ pch <- 20                              # FIXME: let user select via a UI tool
 mgp <- c(2, 0.7, 0)
 keyPressHelp <- "Keystroke commands
 <ul>
-<li> 0: save mouse location as category '0' (and similar for 1 through 9)</li>
-<li> -: remove existing point near mouse location</li>
-<li> u: undo last save</li>
-<li> s: show saved data</li>
-<li> w: write saved data to a csv file</li>
-<li> ?: display this window</li>
+<li> '0': save mouse location in buffer, with category '0'</li>
+<li> '1' through 9: similar to 0</li>
+<li> '-' or 'd': remove existing point near mouse location</li>
+<li> 'u': undo last save</li>
+<li> 'b': display buffer in the R console</li>
+<li> 'w': write saved data to a csv file</li>
+<li> '?': display this window</li>
 </ul>"
+
+startupMessage <- HTML("<p>Use GUI elements to navigate between datasets and view.</p><p>Hovering the mouse over a point shows information about it in the left-hand information box.  While over a point, type a number from <b>0</b> to <b>9</b>, to store the index of the nearest data point in a buffer.  The most recently added point may be removed by typing the <b>u</b> key.  Individual buffer points may be removed by hovering carefully over them and pressing either the <b>d</b> or <b>-</b> key. Type <b>b</b> to show the buffer contents in the R console.</p><p>Type <b>w</b> to write a CSV file containing the buffer. The buffer is also written automically if the dataset is changed via the pulldown menu. Note that the buffer CSV file is named ater the dataset name, which will cause problems if your dataset names collide.  Also, note that matching CSV files are loaded at launch time, so that you can continue with previous analyses.</p><p>A list of keystroke commands is revealed by typing <b>?</b>. In a console, use <b>?oceInspectApp</b> to learn more.</p>")
 
 maybeNull <- function(x, default)
     if (is.null(x)) default else x
@@ -95,6 +98,7 @@ ui <- shiny::fluidPage(
 server <- function(input, output, session)
 {
     debug <- FALSE
+    gaveStartupMessage <- FALSE
     msg <- function(..., eol="\n")
     {
         if (!is.null(debug) && debug)
@@ -117,7 +121,7 @@ server <- function(input, output, session)
     output$nameUI <- shiny::renderUI({
         #shiny::numericInput("index", "Index", value=1L, min=1L, max=shiny::getShinyOption("ndata"), step=1L)
         names <- shiny::getShinyOption("names")
-        shiny::selectInput("name", "Name", choices=names, selected=names[1])
+        shiny::selectInput("name", "Dataset", choices=names, selected=names[1])
     })
 
     bufferSave <- function()
@@ -333,6 +337,10 @@ server <- function(input, output, session)
     })
 
     output$plot <- shiny::renderPlot({
+        if (!gaveStartupMessage) {
+            shiny::showModal(shiny::modalDialog(title="Using this app", startupMessage, size="l"))
+            gaveStartupMessage <<- TRUE
+        }
         msg("output$plot: buffer (length=", state$bufferLength, "): ", paste(buffer$i, collapse=" "))
         colNormal <- gray(0.66, alpha=0.9)
         emphasize <- list(cex=1.4, lwd=3, col=2)
@@ -537,10 +545,10 @@ server <- function(input, output, session)
             buffer$y[n + 1L] <<- lastPoint$y
             buffer$i[n + 1L] <<- lastPoint$i
             state$bufferLength <- n + 1L
-        } else if (key == "-") {
+        } else if (key == "-" || key == "d") {
             #. msg(sprintf("mouse at %.3f %.3f", input$hover$x, input$hover$y))
             ni <- nearestIndex("buffer")
-            msg("keypress '-': ni$i"=ni$i, ", ni$distance=", round(ni$distance, 2))
+            msg("keypress '-' or 'd': ni$i"=ni$i, ", ni$distance=", round(ni$distance, 2))
             i <- ni$i
             w <- which(buffer$i == i)
             if (length(w)) {
@@ -564,7 +572,7 @@ server <- function(input, output, session)
                 buffer$i <<- head(buffer$i, -1L)
                 state$bufferLength <<- state$bufferLength - 1L # this is reactive
             }
-        } else if (key == "s") {
+        } else if (key == "b") {
             if (length(buffer$x) < 1L) {
                 shiny::showNotification("No data to show yet. Press '?' to learn how to save data",
                     type="error")
@@ -606,7 +614,7 @@ server <- function(input, output, session)
 #' on them and typing '-'.
 #'
 #' The buffer data may be saved to a CSV file (the name of which is patterned on the input
-#' filename). This happens if the context is switched (with the "Name" pulldown menu),
+#' filename). This happens if the context is switched (with the "Dataset" pulldown menu),
 #' if the `w` key is pressed, or if the Quit button is pressed.  If `oceInspectApp()` is used
 #' again in the same directory, it will load such files at startup.
 #'

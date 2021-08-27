@@ -30,7 +30,7 @@ and the present plot view.  Points may be removed from this buffer by place the 
 on them and typing '-'.
 
 The buffer data may be saved to a CSV file (the name of which is patterned on the input
-filename). This happens if the context is switched (with the "Name" pulldown menu),
+filename). This happens if the context is switched (with the "Dataset" pulldown menu),
 if the \code{w} key is pressed, or if the Quit button is pressed.  If \code{oceInspectApp()} is used
 again in the same directory, it will load such files at startup.
 }

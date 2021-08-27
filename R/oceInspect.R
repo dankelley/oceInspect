@@ -23,16 +23,16 @@ pch <- 20                              # FIXME: let user select via a UI tool
 mgp <- c(2, 0.7, 0)
 keyPressHelp <- "Keystroke commands
 <ul>
-<li> '0': save mouse location in buffer, with category '0'</li>
-<li> '1' through 9: similar to 0</li>
-<li> '-' or 'd': remove existing point near mouse location</li>
-<li> 'u': undo last save</li>
-<li> 'b': display buffer in the R console</li>
-<li> 'w': write saved data to a csv file</li>
-<li> '?': display this window</li>
+<li> <b>0</b>: save mouse location in buffer, with category <b>0</b></li>
+<li> <b>1</b> through <b>9</b>: similar to <b>0</b></li>
+<li> <b>-</b> or <b>d</b>: remove existing point near mouse location</li>
+<li> <b>u</b>: undo last save</li>
+<li> <b>b</b>: display buffer in the R console</li>
+<li> <b>w</b>: write saved data to a csv file</li>
+<li> <b>?</b>: display this window</li>
 </ul>"
 
-startupMessage <- HTML("<p>Use GUI elements to navigate between datasets and views.  These elements are designed to be reasonably self-describing.</p><p>Hovering the mouse over a point shows information about it in the left-hand information box.  While over a point, type a number from <b>0</b> to <b>9</b>, to store the index of the nearest data point in a buffer.  The most recently added point may be removed by typing the <b>u</b> key.  Individual buffer points may be removed by hovering carefully over them and pressing either the <b>d</b> or <b>-</b> key. Type <b>b</b> to show the buffer contents in the R console.</p><p>Type <b>w</b> to write a CSV file containing the buffer. The buffer is also written automically if the dataset is changed via the pulldown menu. Note that the buffer CSV file is named ater the dataset name, which will cause problems if your dataset names collide.  Also, note that matching CSV files are loaded at launch time, so that you can continue with previous analyses.</p><p>A list of keystroke commands is revealed by typing <b>?</b>. In a console, use <b>?oceInspectApp</b> to learn more.</p>")
+startupMessage <- HTML("<p>Use GUI elements to navigate between datasets and views.</p><p>To zoom in on an area, press the mouse at its lower-left corner, holding it down while sliding to the upper-right corner, and release.  This operation is reversed by clicking on the <b>Unzoom</b> button. Zooming does not carry over if the dataset or plot view is changed.</p><p>Hovering the mouse over a point shows information about it in the left-hand information box.  While over a point, type a number from <b>0</b> to <b>9</b>, to store the index of the nearest data point in a buffer.  The most recently added point may be removed by typing the <b>u</b> key.  Individual buffer points may be removed by pressing either <b>d</b> or <b>-</b> while hovering over a buffered point (as indicated in the left-hand information box). Using a zoomed view can make this operation considerably easier.</p><p>Type <b>b</b> to show the buffer contents in the R console.  Type <b>w</b> to write a CSV file containing the buffer. The buffer is also written automically if the dataset is changed via the pulldown menu. Note that the buffer CSV file is named ater the dataset name, which will cause problems if your dataset names collide.  Also, note that matching CSV files are loaded at launch time, so that you can continue with previous analyses.</p><p>A list of keystroke commands is revealed by typing <b>?</b>. In a console, use <b>?oceInspectApp</b> to learn more.</p>")
 
 maybeNull <- function(x, default)
     if (is.null(x)) default else x
@@ -170,10 +170,9 @@ server <- function(input, output, session)
                 buffer$x <<- d$x
                 buffer$y <<- d$y
                 buffer$i <<- d$i
-                # Round, because write.csv otherwise spews out junk digits.
-                buffer$salinity <<- round(d$salinity, 5)
-                buffer$temperature <<- round(d$temperature, 5)
-                buffer$pressure <<- round(d$pressure, 3)
+                buffer$salinity <<- d$salinity
+                buffer$temperature <<- d$temperature
+                buffer$pressure <<- d$pressure
                 state$savedNumber <<- length(d$key)
             } else {
                 msg("emptying buffer, since no '", csv, "' with existing data")
@@ -557,12 +556,12 @@ server <- function(input, output, session)
             state$bufferLength <- n + 1L
         } else if (key == "-" || key == "d") {
             #. msg(sprintf("mouse at %.3f %.3f", input$hover$x, input$hover$y))
-            ni <- nearestIndex("buffer")
-            msg("keypress '-' or 'd': ni$i"=ni$i, ", ni$distance=", round(ni$distance, 2))
+            ni <- nearestIndex("data")
+            msg("keypress '-' or 'd': ni$i"=ni$i, ", ni$distance=", round(ni$distance, 3))
             i <- ni$i
-            w <- which(buffer$i == i)
-            if (length(w)) {
-                msg("removing buffer entry ", w)
+            if (i %in% buffer$i) {
+                w <- which(i == buffer$i)[1]
+                msg("removing point i=", i, " (buffer entry w=", w, ")")
                 buffer$key <<- buffer$key[-w]
                 buffer$filename <<- buffer$filename[-w]
                 buffer$view <<- buffer$view[-w]
@@ -573,6 +572,8 @@ server <- function(input, output, session)
                 buffer$temperature <<- buffer$temperature[-w]
                 buffer$pressure <<- buffer$pressure[-w]
                 state$bufferLength <<- state$bufferLength - 1L # this is reactive
+            } else {
+                shiny::showNotification("Mouse must be over a buffered point for \"-\" or \"d\" to work. Try zooming, if it is difficult to position the mouse over the desired point.")
             }
         } else if (key == "u") {
             n <- length(buffer$key)
@@ -607,9 +608,12 @@ server <- function(input, output, session)
                 bufferSave()
             }
         } else if (key == "?") {
-            shiny::showModal(shiny::modalDialog(title="Key-stroke commands",
+            shiny::showModal(shiny::modalDialog(title="Keystroke commands",
                     shiny::HTML(keyPressHelp), easyClose=TRUE))
-        }
+        } else {
+            shiny::showModal(shiny::modalDialog(title="Invalid keystroke",
+                    shiny::HTML(paste0("Key <b>", key, "</b> is not valid. Type <b>?</b> to see a list of permitted values.")), easyClose=TRUE))
+         }
     })
 }
 
